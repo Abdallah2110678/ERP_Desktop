@@ -265,11 +265,12 @@ class UsersPage(QWidget):
 
         self.table = QTableWidget()
         self.table.setColumnCount(2)
-        self.table.setHorizontalHeaderLabels(["الإجراءات", "اسم المستخدم"])
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.table.setColumnWidth(0, 200)
+        self.table.setHorizontalHeaderLabels(["اسم المستخدم", "الإجراءات"])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(1, 260)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().hide()
         self.table.setShowGrid(False)
@@ -296,7 +297,7 @@ class UsersPage(QWidget):
             name_item.setForeground(QColor(C_PRIMARY if is_me else C_TEXT_DARK))
             if is_me:
                 name_item.setFont(QFont("Tahoma", 11, QFont.Weight.Bold))
-            self.table.setItem(row, 1, name_item)
+            self.table.setItem(row, 0, name_item)
 
             # Action buttons
             btn_widget = QWidget()
@@ -306,21 +307,19 @@ class UsersPage(QWidget):
 
             pw_btn = QPushButton("🔑  كلمة المرور")
             pw_btn.setStyleSheet(BTN_EDIT)
-            pw_btn.setFixedHeight(30)
             pw_btn.clicked.connect(lambda _, i=uid, n=username: self._change_pw(i, n))
             btn_layout.addWidget(pw_btn)
 
             del_btn = QPushButton("🗑  حذف")
             del_btn.setStyleSheet(BTN_DELETE)
-            del_btn.setFixedHeight(30)
             del_btn.setEnabled(not is_me)
             if is_me:
                 del_btn.setToolTip("لا يمكن حذف حسابك الحالي")
             del_btn.clicked.connect(lambda _, i=uid, n=username: self._delete_user(i, n))
             btn_layout.addWidget(del_btn)
 
-            self.table.setCellWidget(row, 0, btn_widget)
-            self.table.setRowHeight(row, 48)
+            self.table.setCellWidget(row, 1, btn_widget)
+            self.table.setRowHeight(row, 54)
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
