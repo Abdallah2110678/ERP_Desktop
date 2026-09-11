@@ -15,7 +15,7 @@
 
 <div class="node">
   <a name="main.py"></a>
-  <a target="code" href="///D:/projects/ERP/main.py" type="text/plain"><tt>main.py</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/main.py" type="text/plain"><tt>main.py</tt></a>
 <span class="moduletype">Script</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
@@ -189,6 +189,7 @@ imports:
  &#8226;   <a href="#traceback">traceback</a>
  &#8226;   <a href="#types">types</a>
  &#8226;   <a href="#ui.app_icon">ui.app_icon</a>
+ &#8226;   <a href="#ui.login">ui.login</a>
  &#8226;   <a href="#ui.main_window">ui.main_window</a>
  &#8226;   <a href="#warnings">warnings</a>
  &#8226;   <a href="#weakref">weakref</a>
@@ -2710,9 +2711,11 @@ imported by:
  &#8226;   <a href="#PyQt6.QtWidgets">PyQt6.QtWidgets</a>
  &#8226;   <a href="#main.py">main.py</a>
  &#8226;   <a href="#ui.app_icon">ui.app_icon</a>
+ &#8226;   <a href="#ui.change_password">ui.change_password</a>
  &#8226;   <a href="#ui.customer_account">ui.customer_account</a>
  &#8226;   <a href="#ui.customers">ui.customers</a>
  &#8226;   <a href="#ui.dashboard">ui.dashboard</a>
+ &#8226;   <a href="#ui.login">ui.login</a>
  &#8226;   <a href="#ui.main_window">ui.main_window</a>
  &#8226;   <a href="#ui.notification_bar">ui.notification_bar</a>
  &#8226;   <a href="#ui.payments_screen">ui.payments_screen</a>
@@ -2725,6 +2728,7 @@ imported by:
  &#8226;   <a href="#ui.styles">ui.styles</a>
  &#8226;   <a href="#ui.supplier_account">ui.supplier_account</a>
  &#8226;   <a href="#ui.suppliers">ui.suppliers</a>
+ &#8226;   <a href="#ui.users_page">ui.users_page</a>
 
   </div>
 
@@ -2751,9 +2755,11 @@ imported by:
  &#8226;   <a href="#PyQt6.QtWidgets">PyQt6.QtWidgets</a>
  &#8226;   <a href="#main.py">main.py</a>
  &#8226;   <a href="#ui.app_icon">ui.app_icon</a>
+ &#8226;   <a href="#ui.change_password">ui.change_password</a>
  &#8226;   <a href="#ui.customer_account">ui.customer_account</a>
  &#8226;   <a href="#ui.customers">ui.customers</a>
  &#8226;   <a href="#ui.dashboard">ui.dashboard</a>
+ &#8226;   <a href="#ui.login">ui.login</a>
  &#8226;   <a href="#ui.main_window">ui.main_window</a>
  &#8226;   <a href="#ui.notification_bar">ui.notification_bar</a>
  &#8226;   <a href="#ui.payments_screen">ui.payments_screen</a>
@@ -2766,6 +2772,7 @@ imported by:
  &#8226;   <a href="#ui.styles">ui.styles</a>
  &#8226;   <a href="#ui.supplier_account">ui.supplier_account</a>
  &#8226;   <a href="#ui.suppliers">ui.suppliers</a>
+ &#8226;   <a href="#ui.users_page">ui.users_page</a>
 
   </div>
 
@@ -2790,9 +2797,11 @@ imports:
   <div class="import">
 imported by:
     <a href="#main.py">main.py</a>
+ &#8226;   <a href="#ui.change_password">ui.change_password</a>
  &#8226;   <a href="#ui.customer_account">ui.customer_account</a>
  &#8226;   <a href="#ui.customers">ui.customers</a>
  &#8226;   <a href="#ui.dashboard">ui.dashboard</a>
+ &#8226;   <a href="#ui.login">ui.login</a>
  &#8226;   <a href="#ui.main_window">ui.main_window</a>
  &#8226;   <a href="#ui.notification_bar">ui.notification_bar</a>
  &#8226;   <a href="#ui.payments_screen">ui.payments_screen</a>
@@ -2805,6 +2814,7 @@ imported by:
  &#8226;   <a href="#ui.styles">ui.styles</a>
  &#8226;   <a href="#ui.supplier_account">ui.supplier_account</a>
  &#8226;   <a href="#ui.suppliers">ui.suppliers</a>
+ &#8226;   <a href="#ui.users_page">ui.users_page</a>
 
   </div>
 
@@ -7242,17 +7252,19 @@ imported by:
 
 <div class="node">
   <a name="config"></a>
-  <a target="code" href="///D:/projects/ERP/config.py" type="text/plain"><tt>config</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/config.py" type="text/plain"><tt>config</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#datetime">datetime</a>
  &#8226;   <a href="#pathlib">pathlib</a>
+ &#8226;   <a href="#sys">sys</a>
 
   </div>
   <div class="import">
 imported by:
     <a href="#pdf_report">pdf_report</a>
  &#8226;   <a href="#ui.dashboard">ui.dashboard</a>
+ &#8226;   <a href="#ui.login">ui.login</a>
  &#8226;   <a href="#ui.main_window">ui.main_window</a>
 
   </div>
@@ -7650,21 +7662,27 @@ imported by:
 
 <div class="node">
   <a name="database"></a>
-  <a target="code" href="///D:/projects/ERP/database.py" type="text/plain"><tt>database</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/database.py" type="text/plain"><tt>database</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#datetime">datetime</a>
+ &#8226;   <a href="#hashlib">hashlib</a>
+ &#8226;   <a href="#os">os</a>
  &#8226;   <a href="#pathlib">pathlib</a>
  &#8226;   <a href="#sqlite3">sqlite3</a>
+ &#8226;   <a href="#sys">sys</a>
 
   </div>
   <div class="import">
 imported by:
     <a href="#main.py">main.py</a>
  &#8226;   <a href="#pdf_report">pdf_report</a>
+ &#8226;   <a href="#ui.change_password">ui.change_password</a>
  &#8226;   <a href="#ui.customer_account">ui.customer_account</a>
  &#8226;   <a href="#ui.customers">ui.customers</a>
  &#8226;   <a href="#ui.dashboard">ui.dashboard</a>
+ &#8226;   <a href="#ui.login">ui.login</a>
+ &#8226;   <a href="#ui.main_window">ui.main_window</a>
  &#8226;   <a href="#ui.notification_bar">ui.notification_bar</a>
  &#8226;   <a href="#ui.payments_screen">ui.payments_screen</a>
  &#8226;   <a href="#ui.product_report">ui.product_report</a>
@@ -7675,6 +7693,7 @@ imported by:
  &#8226;   <a href="#ui.sales">ui.sales</a>
  &#8226;   <a href="#ui.supplier_account">ui.supplier_account</a>
  &#8226;   <a href="#ui.suppliers">ui.suppliers</a>
+ &#8226;   <a href="#ui.users_page">ui.users_page</a>
 
   </div>
 
@@ -7746,6 +7765,7 @@ imported by:
  &#8226;   <a href="#reportlab.lib.normalDate">reportlab.lib.normalDate</a>
  &#8226;   <a href="#reportlab.lib.utils">reportlab.lib.utils</a>
  &#8226;   <a href="#sqlite3.dbapi2">sqlite3.dbapi2</a>
+ &#8226;   <a href="#ui.main_window">ui.main_window</a>
  &#8226;   <a href="#ui.notification_bar">ui.notification_bar</a>
  &#8226;   <a href="#ui.product_report">ui.product_report</a>
  &#8226;   <a href="#ui.products">ui.products</a>
@@ -17050,6 +17070,7 @@ imports:
   <div class="import">
 imported by:
     <a href="#charset_normalizer.models">charset_normalizer.models</a>
+ &#8226;   <a href="#database">database</a>
  &#8226;   <a href="#hmac">hmac</a>
  &#8226;   <a href="#random">random</a>
  &#8226;   <a href="#reportlab.lib.pdfencrypt">reportlab.lib.pdfencrypt</a>
@@ -26346,6 +26367,7 @@ imported by:
  &#8226;   <a href="#ctypes._aix">ctypes._aix</a>
  &#8226;   <a href="#ctypes.macholib.dyld">ctypes.macholib.dyld</a>
  &#8226;   <a href="#ctypes.util">ctypes.util</a>
+ &#8226;   <a href="#database">database</a>
  &#8226;   <a href="#doctest">doctest</a>
  &#8226;   <a href="#email.utils">email.utils</a>
  &#8226;   <a href="#fileinput">fileinput</a>
@@ -26612,7 +26634,7 @@ imported by:
 
 <div class="node">
   <a name="pdf_report"></a>
-  <a target="code" href="///D:/projects/ERP/pdf_report.py" type="text/plain"><tt>pdf_report</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/pdf_report.py" type="text/plain"><tt>pdf_report</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#arabic_reshaper">arabic_reshaper</a>
@@ -30396,6 +30418,7 @@ imported by:
  &#8226;   <a href="#numpy.testing._private.utils">numpy.testing._private.utils</a>
  &#8226;   <a href="#tarfile">tarfile</a>
  &#8226;   <a href="#tempfile">tempfile</a>
+ &#8226;   <a href="#ui.main_window">ui.main_window</a>
  &#8226;   <a href="#webbrowser">webbrowser</a>
  &#8226;   <a href="#zipfile">zipfile</a>
 
@@ -30951,12 +30974,14 @@ imported by:
  &#8226;   <a href="#codecs">codecs</a>
  &#8226;   <a href="#collections">collections</a>
  &#8226;   <a href="#concurrent.futures.process">concurrent.futures.process</a>
+ &#8226;   <a href="#config">config</a>
  &#8226;   <a href="#configparser">configparser</a>
  &#8226;   <a href="#contextlib">contextlib</a>
  &#8226;   <a href="#ctypes">ctypes</a>
  &#8226;   <a href="#ctypes._aix">ctypes._aix</a>
  &#8226;   <a href="#ctypes._endian">ctypes._endian</a>
  &#8226;   <a href="#ctypes.util">ctypes.util</a>
+ &#8226;   <a href="#database">database</a>
  &#8226;   <a href="#dataclasses">dataclasses</a>
  &#8226;   <a href="#datetime">datetime</a>
  &#8226;   <a href="#defusedxml.ElementTree">defusedxml.ElementTree</a>
@@ -31956,13 +31981,15 @@ imported by:
 
 <div class="node">
   <a name="ui"></a>
-  <a target="code" href="///D:/projects/ERP/ui/__init__.py" type="text/plain"><tt>ui</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/__init__.py" type="text/plain"><tt>ui</tt></a>
 <span class="moduletype">Package</span>  <div class="import">
 imported by:
     <a href="#ui.app_icon">ui.app_icon</a>
+ &#8226;   <a href="#ui.change_password">ui.change_password</a>
  &#8226;   <a href="#ui.customer_account">ui.customer_account</a>
  &#8226;   <a href="#ui.customers">ui.customers</a>
  &#8226;   <a href="#ui.dashboard">ui.dashboard</a>
+ &#8226;   <a href="#ui.login">ui.login</a>
  &#8226;   <a href="#ui.main_window">ui.main_window</a>
  &#8226;   <a href="#ui.notification_bar">ui.notification_bar</a>
  &#8226;   <a href="#ui.payments_screen">ui.payments_screen</a>
@@ -31975,6 +32002,7 @@ imported by:
  &#8226;   <a href="#ui.styles">ui.styles</a>
  &#8226;   <a href="#ui.supplier_account">ui.supplier_account</a>
  &#8226;   <a href="#ui.suppliers">ui.suppliers</a>
+ &#8226;   <a href="#ui.users_page">ui.users_page</a>
 
   </div>
 
@@ -31982,7 +32010,7 @@ imported by:
 
 <div class="node">
   <a name="ui.app_icon"></a>
-  <a target="code" href="///D:/projects/ERP/ui/app_icon.py" type="text/plain"><tt>ui.app_icon</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/app_icon.py" type="text/plain"><tt>ui.app_icon</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
@@ -31993,6 +32021,27 @@ imports:
   <div class="import">
 imported by:
     <a href="#main.py">main.py</a>
+ &#8226;   <a href="#ui.login">ui.login</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="ui.change_password"></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/change_password.py" type="text/plain"><tt>ui.change_password</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
+ &#8226;   <a href="#PyQt6.QtGui">PyQt6.QtGui</a>
+ &#8226;   <a href="#PyQt6.QtWidgets">PyQt6.QtWidgets</a>
+ &#8226;   <a href="#database">database</a>
+ &#8226;   <a href="#ui">ui</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#ui.main_window">ui.main_window</a>
 
   </div>
 
@@ -32000,7 +32049,7 @@ imported by:
 
 <div class="node">
   <a name="ui.customer_account"></a>
-  <a target="code" href="///D:/projects/ERP/ui/customer_account.py" type="text/plain"><tt>ui.customer_account</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/customer_account.py" type="text/plain"><tt>ui.customer_account</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
@@ -32023,7 +32072,7 @@ imported by:
 
 <div class="node">
   <a name="ui.customers"></a>
-  <a target="code" href="///D:/projects/ERP/ui/customers.py" type="text/plain"><tt>ui.customers</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/customers.py" type="text/plain"><tt>ui.customers</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
@@ -32046,7 +32095,7 @@ imported by:
 
 <div class="node">
   <a name="ui.dashboard"></a>
-  <a target="code" href="///D:/projects/ERP/ui/dashboard.py" type="text/plain"><tt>ui.dashboard</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/dashboard.py" type="text/plain"><tt>ui.dashboard</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
@@ -32067,15 +32116,41 @@ imported by:
 </div>
 
 <div class="node">
-  <a name="ui.main_window"></a>
-  <a target="code" href="///D:/projects/ERP/ui/main_window.py" type="text/plain"><tt>ui.main_window</tt></a>
+  <a name="ui.login"></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/login.py" type="text/plain"><tt>ui.login</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
  &#8226;   <a href="#PyQt6.QtGui">PyQt6.QtGui</a>
  &#8226;   <a href="#PyQt6.QtWidgets">PyQt6.QtWidgets</a>
  &#8226;   <a href="#config">config</a>
+ &#8226;   <a href="#database">database</a>
  &#8226;   <a href="#ui">ui</a>
+ &#8226;   <a href="#ui.app_icon">ui.app_icon</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#main.py">main.py</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="ui.main_window"></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/main_window.py" type="text/plain"><tt>ui.main_window</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
+ &#8226;   <a href="#PyQt6.QtGui">PyQt6.QtGui</a>
+ &#8226;   <a href="#PyQt6.QtWidgets">PyQt6.QtWidgets</a>
+ &#8226;   <a href="#config">config</a>
+ &#8226;   <a href="#database">database</a>
+ &#8226;   <a href="#datetime">datetime</a>
+ &#8226;   <a href="#shutil">shutil</a>
+ &#8226;   <a href="#ui">ui</a>
+ &#8226;   <a href="#ui.change_password">ui.change_password</a>
  &#8226;   <a href="#ui.customer_account">ui.customer_account</a>
  &#8226;   <a href="#ui.customers">ui.customers</a>
  &#8226;   <a href="#ui.dashboard">ui.dashboard</a>
@@ -32090,6 +32165,7 @@ imports:
  &#8226;   <a href="#ui.styles">ui.styles</a>
  &#8226;   <a href="#ui.supplier_account">ui.supplier_account</a>
  &#8226;   <a href="#ui.suppliers">ui.suppliers</a>
+ &#8226;   <a href="#ui.users_page">ui.users_page</a>
 
   </div>
   <div class="import">
@@ -32102,7 +32178,7 @@ imported by:
 
 <div class="node">
   <a name="ui.notification_bar"></a>
-  <a target="code" href="///D:/projects/ERP/ui/notification_bar.py" type="text/plain"><tt>ui.notification_bar</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/notification_bar.py" type="text/plain"><tt>ui.notification_bar</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
@@ -32126,7 +32202,7 @@ imported by:
 
 <div class="node">
   <a name="ui.payments_screen"></a>
-  <a target="code" href="///D:/projects/ERP/ui/payments_screen.py" type="text/plain"><tt>ui.payments_screen</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/payments_screen.py" type="text/plain"><tt>ui.payments_screen</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
@@ -32148,7 +32224,7 @@ imported by:
 
 <div class="node">
   <a name="ui.product_report"></a>
-  <a target="code" href="///D:/projects/ERP/ui/product_report.py" type="text/plain"><tt>ui.product_report</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/product_report.py" type="text/plain"><tt>ui.product_report</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
@@ -32172,7 +32248,7 @@ imported by:
 
 <div class="node">
   <a name="ui.products"></a>
-  <a target="code" href="///D:/projects/ERP/ui/products.py" type="text/plain"><tt>ui.products</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/products.py" type="text/plain"><tt>ui.products</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
@@ -32199,6 +32275,7 @@ imported by:
  &#8226;   <a href="#ui.sales">ui.sales</a>
  &#8226;   <a href="#ui.supplier_account">ui.supplier_account</a>
  &#8226;   <a href="#ui.suppliers">ui.suppliers</a>
+ &#8226;   <a href="#ui.users_page">ui.users_page</a>
 
   </div>
 
@@ -32206,7 +32283,7 @@ imported by:
 
 <div class="node">
   <a name="ui.purchase_returns"></a>
-  <a target="code" href="///D:/projects/ERP/ui/purchase_returns.py" type="text/plain"><tt>ui.purchase_returns</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/purchase_returns.py" type="text/plain"><tt>ui.purchase_returns</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
@@ -32228,7 +32305,7 @@ imported by:
 
 <div class="node">
   <a name="ui.purchases"></a>
-  <a target="code" href="///D:/projects/ERP/ui/purchases.py" type="text/plain"><tt>ui.purchases</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/purchases.py" type="text/plain"><tt>ui.purchases</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
@@ -32250,7 +32327,7 @@ imported by:
 
 <div class="node">
   <a name="ui.sale_returns"></a>
-  <a target="code" href="///D:/projects/ERP/ui/sale_returns.py" type="text/plain"><tt>ui.sale_returns</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/sale_returns.py" type="text/plain"><tt>ui.sale_returns</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
@@ -32272,7 +32349,7 @@ imported by:
 
 <div class="node">
   <a name="ui.sales"></a>
-  <a target="code" href="///D:/projects/ERP/ui/sales.py" type="text/plain"><tt>ui.sales</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/sales.py" type="text/plain"><tt>ui.sales</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
@@ -32294,7 +32371,7 @@ imported by:
 
 <div class="node">
   <a name="ui.styles"></a>
-  <a target="code" href="///D:/projects/ERP/ui/styles.py" type="text/plain"><tt>ui.styles</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/styles.py" type="text/plain"><tt>ui.styles</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
@@ -32319,6 +32396,7 @@ imported by:
  &#8226;   <a href="#ui.sales">ui.sales</a>
  &#8226;   <a href="#ui.supplier_account">ui.supplier_account</a>
  &#8226;   <a href="#ui.suppliers">ui.suppliers</a>
+ &#8226;   <a href="#ui.users_page">ui.users_page</a>
 
   </div>
 
@@ -32326,7 +32404,7 @@ imported by:
 
 <div class="node">
   <a name="ui.supplier_account"></a>
-  <a target="code" href="///D:/projects/ERP/ui/supplier_account.py" type="text/plain"><tt>ui.supplier_account</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/supplier_account.py" type="text/plain"><tt>ui.supplier_account</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
@@ -32349,7 +32427,7 @@ imported by:
 
 <div class="node">
   <a name="ui.suppliers"></a>
-  <a target="code" href="///D:/projects/ERP/ui/suppliers.py" type="text/plain"><tt>ui.suppliers</tt></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/suppliers.py" type="text/plain"><tt>ui.suppliers</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
@@ -32357,6 +32435,28 @@ imports:
  &#8226;   <a href="#PyQt6.QtWidgets">PyQt6.QtWidgets</a>
  &#8226;   <a href="#database">database</a>
  &#8226;   <a href="#pdf_report">pdf_report</a>
+ &#8226;   <a href="#ui">ui</a>
+ &#8226;   <a href="#ui.products">ui.products</a>
+ &#8226;   <a href="#ui.styles">ui.styles</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#ui.main_window">ui.main_window</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="ui.users_page"></a>
+  <a target="code" href="///D:/projects/erp_desktop/ERP_Desktop/ui/users_page.py" type="text/plain"><tt>ui.users_page</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#PyQt6.QtCore">PyQt6.QtCore</a>
+ &#8226;   <a href="#PyQt6.QtGui">PyQt6.QtGui</a>
+ &#8226;   <a href="#PyQt6.QtWidgets">PyQt6.QtWidgets</a>
+ &#8226;   <a href="#database">database</a>
  &#8226;   <a href="#ui">ui</a>
  &#8226;   <a href="#ui.products">ui.products</a>
  &#8226;   <a href="#ui.styles">ui.styles</a>

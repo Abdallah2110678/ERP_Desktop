@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QTabWidget, QDateEdit, QSplitter,
 )
 from PyQt6.QtCore import Qt, QDate
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtGui import QColor, QFont, QPalette
 import database as db
 from ui.styles import (
     TABLE_STYLE, BTN_ADD, BTN_SECONDARY,
@@ -463,6 +463,16 @@ class PdfRangeDialog(QDialog):
         self.setFixedWidth(400)
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setStyleSheet(DIALOG_STYLE)
+        _light = QPalette()
+        _light.setColor(QPalette.ColorRole.Window,          QColor("#f4f7fa"))
+        _light.setColor(QPalette.ColorRole.WindowText,      QColor("#1a2535"))
+        _light.setColor(QPalette.ColorRole.Base,            QColor("#ffffff"))
+        _light.setColor(QPalette.ColorRole.Text,            QColor("#1a2535"))
+        _light.setColor(QPalette.ColorRole.Button,          QColor("#f4f7fa"))
+        _light.setColor(QPalette.ColorRole.ButtonText,      QColor("#1a2535"))
+        _light.setColor(QPalette.ColorRole.Highlight,       QColor("#27ae60"))
+        _light.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+        self.setPalette(_light)
         self._setup_ui(customer)
 
     def _setup_ui(self, customer):

@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QTabWidget, QDateEdit,
 )
 from PyQt6.QtCore import Qt, QDate
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtGui import QColor, QFont, QPalette
 import database as db
 from ui.styles import (
     TABLE_STYLE, BTN_ADD, BTN_EDIT, BTN_DELETE, BTN_SECONDARY,
@@ -305,10 +305,20 @@ class SupplierPdfRangeDialog(QDialog):
             QLabel {{ font-size: 13px; color: #1a2535; background: transparent; }}
             QDateEdit {{
                 padding: 8px 12px; border: 1.5px solid #dce3ec; border-radius: 7px;
-                font-size: 13px; font-family: Tahoma; background: white;
+                font-size: 13px; font-family: Tahoma; background: white; color: #1a2535;
             }}
             QDateEdit:focus {{ border-color: {C_TEAL}; }}
         """)
+        _light = QPalette()
+        _light.setColor(QPalette.ColorRole.Window,          QColor("#f4f7fa"))
+        _light.setColor(QPalette.ColorRole.WindowText,      QColor("#1a2535"))
+        _light.setColor(QPalette.ColorRole.Base,            QColor("#ffffff"))
+        _light.setColor(QPalette.ColorRole.Text,            QColor("#1a2535"))
+        _light.setColor(QPalette.ColorRole.Button,          QColor("#f4f7fa"))
+        _light.setColor(QPalette.ColorRole.ButtonText,      QColor("#1a2535"))
+        _light.setColor(QPalette.ColorRole.Highlight,       QColor(C_TEAL))
+        _light.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+        self.setPalette(_light)
         self._setup_ui(supplier)
 
     def _setup_ui(self, supplier):

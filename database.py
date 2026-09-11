@@ -1,9 +1,17 @@
 import sqlite3
 import hashlib
 import os
+import sys
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "pharmacy.db"
+
+def _app_dir() -> Path:
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent
+
+
+DB_PATH = _app_dir() / "pharmacy.db"
 
 
 def get_connection():
