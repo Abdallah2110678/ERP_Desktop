@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QToolButton, QAbstractItemView, QCalendarWidget,
 )
 from PyQt6.QtGui import QColor, QPalette, QTextCharFormat
-from PyQt6.QtCore import Qt, QObject, QEvent, QDate
+from PyQt6.QtCore import Qt, QObject, QEvent, QDate, QLocale
 
 # ── Color palette ──────────────────────────────────────────────────────────────
 C_SIDEBAR        = "#0f1f2e"
@@ -416,9 +416,11 @@ class _StyledCalendar(QCalendarWidget):
 
 def style_calendar(date_edit):
     """Attach a _StyledCalendar to a QDateEdit for reliable cross-theme rendering."""
+    ar_locale = QLocale(QLocale.Language.Arabic)
+    date_edit.setLocale(ar_locale)
     cal = _StyledCalendar()
-    cal.setLocale(date_edit.locale())
-    cal.setLayoutDirection(date_edit.layoutDirection())
+    cal.setLocale(ar_locale)
+    cal.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
     cal.setStyleSheet(_CALENDAR_CSS)
     cal.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
 

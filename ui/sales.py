@@ -2,14 +2,14 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QDialog, QLineEdit,
     QDoubleSpinBox, QMessageBox, QHeaderView, QComboBox, QFrame,
-    QCompleter,
+    QCompleter, QDateEdit,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QColor, QFont
 import database as db
 from ui.styles import (
     TABLE_STYLE, BTN_ADD, BTN_EDIT, BTN_SECONDARY, BTN_ORANGE,
-    DIALOG_STYLE, PAGE_STYLE, INPUT_STYLE, card_shadow,
+    DIALOG_STYLE, PAGE_STYLE, INPUT_STYLE, card_shadow, style_calendar,
     show_info, show_warning, show_error,
     C_TEXT_DARK, C_TEXT_MED, C_PRIMARY, C_DANGER, C_ORANGE,
 )
@@ -115,6 +115,19 @@ class NewSaleDialog(QDialog):
         options_row.addSpacing(28)
         options_row.addWidget(inv_lbl_top)
         options_row.addWidget(self.invoice_type)
+        options_row.addSpacing(28)
+
+        date_lbl = QLabel("التاريخ:")
+        date_lbl.setStyleSheet(f"color: {C_TEXT_DARK}; font-size: 12px; font-weight: bold;")
+        self.sale_date = QDateEdit()
+        self.sale_date.setCalendarPopup(True)
+        self.sale_date.setDate(QDate.currentDate())
+        self.sale_date.setDisplayFormat("yyyy-MM-dd")
+        self.sale_date.setStyleSheet(INPUT_STYLE)
+        self.sale_date.setFixedWidth(150)
+        style_calendar(self.sale_date)
+        options_row.addWidget(date_lbl)
+        options_row.addWidget(self.sale_date)
         options_row.addStretch()
         layout.addLayout(options_row)
 
@@ -286,8 +299,7 @@ class NewSaleDialog(QDialog):
         self.customer_combo.clear()
         self.customer_combo.addItem("عميل نقدي (بدون حساب)", None)
         for c in customers:
-            debt_str = f"  —  رصيد: {c['total_debt']:.2f} ج.م" if c['total_debt'] != 0 else ""
-            self.customer_combo.addItem(f"{c['name']}{debt_str}", c['id'])
+            self.customer_combo.addItem(c['name'], c['id'])
         self.customer_combo.blockSignals(False)
 
     def _filter_customers(self, query):
@@ -446,7 +458,9 @@ class NewSaleDialog(QDialog):
         inv_type    = self.invoice_type.currentText()
         notes       = self.notes_input.text().strip()
 
-        sale_id = db.create_sale(cid, cname, self.cart, total, paid, pay_type, notes, inv_type)
+        _d = self.sale_date.date()
+        sale_date = f"{_d.year()}-{_d.month():02d}-{_d.day():02d}"
+        sale_id = db.create_sale(cid, cname, self.cart, total, paid, pay_type, notes, inv_type, date=sale_date)
         show_info(self, "تم بنجاح",
             f"✓  تم تسجيل الفاتورة بنجاح\n"
             f"رقم الفاتورة: {sale_id}\n"

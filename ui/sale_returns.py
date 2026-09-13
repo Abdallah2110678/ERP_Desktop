@@ -1,14 +1,14 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QDialog, QLineEdit,
-    QDoubleSpinBox, QHeaderView, QComboBox, QFrame,
+    QDoubleSpinBox, QHeaderView, QComboBox, QFrame, QDateEdit,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QColor, QFont
 import database as db
 from ui.styles import (
     TABLE_STYLE, BTN_EDIT, BTN_SECONDARY,
-    DIALOG_STYLE, PAGE_STYLE, INPUT_STYLE, card_shadow,
+    DIALOG_STYLE, PAGE_STYLE, INPUT_STYLE, card_shadow, style_calendar,
     show_info, show_warning,
     C_TEXT_DARK, C_TEXT_MED, C_PRIMARY, C_DANGER, C_PURPLE,
 )
@@ -61,6 +61,19 @@ class NewSaleReturnDialog(QDialog):
         self.inv_type_combo.setFixedWidth(110)
         cust_row.addWidget(self.inv_type_combo)
         cust_row.addWidget(QLabel("نوع الفاتورة:"))
+        cust_row.addSpacing(20)
+
+        date_lbl = QLabel("التاريخ:")
+        date_lbl.setStyleSheet(f"color: {C_TEXT_DARK}; font-size: 12px; font-weight: bold;")
+        self.ret_date = QDateEdit()
+        self.ret_date.setCalendarPopup(True)
+        self.ret_date.setDate(QDate.currentDate())
+        self.ret_date.setDisplayFormat("yyyy-MM-dd")
+        self.ret_date.setStyleSheet(INPUT_STYLE)
+        self.ret_date.setFixedWidth(150)
+        style_calendar(self.ret_date)
+        cust_row.addWidget(date_lbl)
+        cust_row.addWidget(self.ret_date)
         cust_row.addStretch()
         layout.addLayout(cust_row)
 
@@ -296,7 +309,9 @@ class NewSaleReturnDialog(QDialog):
         cid = self.customer_combo.currentData()
         cname = self.customer_combo.currentText().split("   —")[0]
 
-        db.create_sale_return(cid, cname, self.cart, total, inv_type, notes)
+        _d = self.ret_date.date()
+        ret_date = f"{_d.year()}-{_d.month():02d}-{_d.day():02d}"
+        db.create_sale_return(cid, cname, self.cart, total, inv_type, notes, date=ret_date)
         show_info(self, "تم بنجاح",
                   f"✓  تم تسجيل مرتجع البيع بنجاح\n"
                   f"الإجمالي: {total:.2f} ج.م\n"

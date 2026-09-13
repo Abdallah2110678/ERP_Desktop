@@ -479,15 +479,17 @@ def get_product_nearest_expiries():
 
 # ===== Sales =====
 
-def create_sale(customer_id, customer_name, items, total_amount, paid_amount, payment_type, notes, invoice_type='بيطري'):
+def create_sale(customer_id, customer_name, items, total_amount, paid_amount, payment_type, notes, invoice_type='بيطري', date=None):
+    import datetime as _dt
     remaining = max(0.0, total_amount - paid_amount)
+    sale_date = date or _dt.date.today().strftime('%Y-%m-%d')
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute(
-        """INSERT INTO sales (customer_id, customer_name, total_amount, paid_amount, remaining, payment_type, invoice_type, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (customer_id, customer_name, total_amount, paid_amount, remaining, payment_type, invoice_type, notes)
+        """INSERT INTO sales (customer_id, customer_name, total_amount, paid_amount, remaining, payment_type, invoice_type, notes, date)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (customer_id, customer_name, total_amount, paid_amount, remaining, payment_type, invoice_type, notes, sale_date)
     )
     sale_id = cursor.lastrowid
 
@@ -614,12 +616,14 @@ def delete_supplier_payment(payment_id):
 
 # ===== Purchases =====
 
-def create_sale_return(customer_id, customer_name, items, total_amount, invoice_type, notes):
+def create_sale_return(customer_id, customer_name, items, total_amount, invoice_type, notes, date=None):
+    import datetime as _dt
+    ret_date = date or _dt.date.today().strftime('%Y-%m-%d')
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO sale_returns (customer_id, customer_name, total_amount, invoice_type, notes) VALUES (?, ?, ?, ?, ?)",
-        (customer_id, customer_name, total_amount, invoice_type, notes)
+        "INSERT INTO sale_returns (customer_id, customer_name, total_amount, invoice_type, notes, date) VALUES (?, ?, ?, ?, ?, ?)",
+        (customer_id, customer_name, total_amount, invoice_type, notes, ret_date)
     )
     return_id = cursor.lastrowid
     for item in items:
@@ -653,12 +657,14 @@ def get_sale_return_items(return_id):
     return [dict(r) for r in rows]
 
 
-def create_purchase_return(supplier_id, supplier_name, items, total_amount, invoice_type, notes):
+def create_purchase_return(supplier_id, supplier_name, items, total_amount, invoice_type, notes, date=None):
+    import datetime as _dt
+    ret_date = date or _dt.date.today().strftime('%Y-%m-%d')
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO purchase_returns (supplier_id, supplier_name, total_amount, invoice_type, notes) VALUES (?, ?, ?, ?, ?)",
-        (supplier_id, supplier_name, total_amount, invoice_type, notes)
+        "INSERT INTO purchase_returns (supplier_id, supplier_name, total_amount, invoice_type, notes, date) VALUES (?, ?, ?, ?, ?, ?)",
+        (supplier_id, supplier_name, total_amount, invoice_type, notes, ret_date)
     )
     return_id = cursor.lastrowid
     for item in items:
