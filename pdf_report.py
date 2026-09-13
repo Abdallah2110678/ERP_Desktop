@@ -415,10 +415,12 @@ def generate_customer_account(customer_id: int, date_from: str, date_to: str) ->
     returns  = data['returns']
     payments = data['payments']
 
-    vet_sales    = [s for s in sales   if s.get('invoice_type', 'بيطري') == 'بيطري']
-    feed_sales   = [s for s in sales   if s.get('invoice_type', 'بيطري') == 'أعلاف']
-    vet_returns  = [r for r in returns if r.get('invoice_type', 'بيطري') == 'بيطري']
-    feed_returns = [r for r in returns if r.get('invoice_type', 'بيطري') == 'أعلاف']
+    vet_sales     = [s for s in sales   if s.get('invoice_type', 'بيطري') == 'بيطري']
+    feed_sales    = [s for s in sales   if s.get('invoice_type', 'بيطري') == 'أعلاف']
+    other_sales   = [s for s in sales   if s.get('invoice_type', 'بيطري') not in ('بيطري', 'أعلاف')]
+    vet_returns   = [r for r in returns if r.get('invoice_type', 'بيطري') == 'بيطري']
+    feed_returns  = [r for r in returns if r.get('invoice_type', 'بيطري') == 'أعلاف']
+    other_returns = [r for r in returns if r.get('invoice_type', 'بيطري') not in ('بيطري', 'أعلاف')]
 
     total_sales    = sum(s['total_amount'] for s in sales)
     total_returns  = sum(r['total_amount'] for r in returns)
@@ -475,8 +477,10 @@ def generate_customer_account(customer_id: int, date_from: str, date_to: str) ->
 
     _sales_section("مبيعات بيطري", vet_sales)
     _sales_section("مبيعات أعلاف", feed_sales)
+    _sales_section("مبيعات أخرى", other_sales)
     _returns_section("مرتجعات بيطري", vet_returns)
     _returns_section("مرتجعات أعلاف", feed_returns)
+    _returns_section("مرتجعات أخرى", other_returns)
 
     # Payments table
     if payments:
@@ -834,7 +838,8 @@ def generate_product_report(product_id: int, date_from: str, date_to: str) -> st
     _rtext(c, f"اسم الصنف:  {product['name']}", MR - 8, y - 14, "ArBold", 11)
     _rtext(c, f"النوع:  {product.get('product_type', '—')}   |   الوحدة:  {product['unit']}", MR - 8, y - 30, "Ar", 10)
     _rtext(c, f"سعر الشراء:  {product['purchase_price']:.2f} ج.م   |   سعر البيع:  {product['selling_price']:.2f} ج.م", MR - 8, y - 46, "Ar", 10)
-    _ltext(c, f"الكمية الحالية:  {product['quantity']:.2f} وحدة", ML + 8, y - 14, "ArBold", 11)
+    unit = product.get('unit') or 'وحدة'
+    _ltext(c, f"الكمية الحالية:  {product['quantity']:.2f} {unit}", ML + 8, y - 14, "ArBold", 11)
     y -= box_h + 16
 
     # ── Shared columns for purchases / sales / returns ────────────────────────
@@ -917,13 +922,14 @@ def generate_product_report(product_id: int, date_from: str, date_to: str) -> st
     c.rect(ML, y - sum_h, TW, sum_h, fill=1, stroke=1)
     c.setFillColor(BLACK)
     _ctext(c, "ملخص الصنف", W / 2, y - 14, "ArBold", 13)
-    _rtext(c, f"إجمالي الكمية المشتراة (في الفترة):    {total_purch_qty:.2f} وحدة",  MR - 10, y - 30,  "Ar", 10)
+    unit = product.get('unit') or 'وحدة'
+    _rtext(c, f"إجمالي الكمية المشتراة (في الفترة):    {total_purch_qty:.2f} {unit}",  MR - 10, y - 30,  "Ar", 10)
     _rtext(c, f"إجمالي تكلفة المشتريات:                 {total_purch_cost:.2f} ج.م", MR - 10, y - 46,  "Ar", 10)
-    _rtext(c, f"إجمالي الكمية المباعة (في الفترة):      {total_sales_qty:.2f} وحدة",  MR - 10, y - 62,  "Ar", 10)
+    _rtext(c, f"إجمالي الكمية المباعة (في الفترة):      {total_sales_qty:.2f} {unit}",  MR - 10, y - 62,  "Ar", 10)
     _rtext(c, f"إجمالي إيرادات المبيعات:                {total_sales_rev:.2f} ج.م",  MR - 10, y - 78,  "Ar", 10)
-    _rtext(c, f"مرتجعات البيع (الكمية):                 {total_sr_qty:.2f} وحدة",    MR - 10, y - 94,  "Ar", 10)
-    _rtext(c, f"مرتجعات الشراء (الكمية):                {total_pr_qty:.2f} وحدة",    MR - 10, y - 110, "Ar", 10)
-    _rtext(c, f"الكمية الحالية في المخزون:              {product['quantity']:.2f} وحدة", MR - 10, y - 126, "ArBold", 11)
+    _rtext(c, f"مرتجعات البيع (الكمية):                 {total_sr_qty:.2f} {unit}",    MR - 10, y - 94,  "Ar", 10)
+    _rtext(c, f"مرتجعات الشراء (الكمية):                {total_pr_qty:.2f} {unit}",    MR - 10, y - 110, "Ar", 10)
+    _rtext(c, f"الكمية الحالية في المخزون:              {product['quantity']:.2f} {unit}", MR - 10, y - 126, "ArBold", 11)
     _rtext(c, f"الربح التقديري:                          {net_profit:.2f} ج.م",       MR - 10, y - 142, "ArBold", 11)
 
     c.setFont("Ar", 8);  c.setFillColor(MID_GRAY)

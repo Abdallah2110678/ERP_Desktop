@@ -101,7 +101,7 @@ class ProductDialog(QDialog):
         form.addRow("سعر البيع:", self.selling_price_input)
 
         self.type_combo = QComboBox()
-        self.type_combo.addItems(["بيطري", "أعلاف"])
+        self.type_combo.addItems(["بيطري", "أعلاف", "أخرى"])
         self.type_combo.setStyleSheet(INPUT_STYLE)
         form.addRow("نوع الصنف:", self.type_combo)
 
@@ -329,7 +329,7 @@ class ProductsPage(QWidget):
             ptype = p.get('product_type', 'بيطري')
             type_item = QTableWidgetItem(ptype)
             type_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            type_item.setForeground(QColor(C_ORANGE if ptype == 'أعلاف' else '#16a085'))
+            type_item.setForeground(QColor(C_ORANGE if ptype == 'أعلاف' else ('#2c3e50' if ptype == 'أخرى' else '#16a085')))
             self.table.setItem(row, 5, type_item)
 
             unit_item = QTableWidgetItem(p['unit'])

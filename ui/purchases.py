@@ -69,7 +69,7 @@ class NewPurchaseDialog(QDialog):
 
         inv_type_lbl = QLabel("نوع الفاتورة:")
         self.inv_type_combo = QComboBox()
-        self.inv_type_combo.addItems(["بيطري", "أعلاف"])
+        self.inv_type_combo.addItems(["بيطري", "أعلاف", "أخرى"])
         self.inv_type_combo.setStyleSheet(INPUT_STYLE)
         self.inv_type_combo.setFixedWidth(110)
         sup_row.addWidget(self.inv_type_combo)

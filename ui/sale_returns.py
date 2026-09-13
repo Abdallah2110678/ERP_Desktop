@@ -56,7 +56,7 @@ class NewSaleReturnDialog(QDialog):
         cust_row.addSpacing(16)
 
         self.inv_type_combo = QComboBox()
-        self.inv_type_combo.addItems(["بيطري", "أعلاف"])
+        self.inv_type_combo.addItems(["بيطري", "أعلاف", "أخرى"])
         self.inv_type_combo.setStyleSheet(INPUT_STYLE)
         self.inv_type_combo.setFixedWidth(110)
         cust_row.addWidget(self.inv_type_combo)

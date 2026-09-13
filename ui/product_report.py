@@ -350,11 +350,12 @@ class ProductReportPage(QWidget):
         sales_rev     = sum(r['total']    for r in data['sales'])
         net_profit    = sales_rev - (sales_qty * product['purchase_price'])
 
-        self.sum_purch_qty_lbl.setText(f"{purch_qty:.2f} وحدة")
+        unit = product.get('unit') or 'وحدة'
+        self.sum_purch_qty_lbl.setText(f"{purch_qty:.2f} {unit}")
         self.sum_purch_cost_lbl.setText(f"{purch_cost:.2f} ج.م")
-        self.sum_sales_qty_lbl.setText(f"{sales_qty:.2f} وحدة")
+        self.sum_sales_qty_lbl.setText(f"{sales_qty:.2f} {unit}")
         self.sum_sales_rev_lbl.setText(f"{sales_rev:.2f} ج.م")
-        self.sum_stock_qty_lbl.setText(f"{product['quantity']:.2f} وحدة")
+        self.sum_stock_qty_lbl.setText(f"{product['quantity']:.2f} {unit}")
         self.sum_profit_lbl.setText(f"{net_profit:.2f} ج.م")
         profit_color = C_TEAL if net_profit >= 0 else C_DANGER
         self.sum_profit_lbl.setStyleSheet(

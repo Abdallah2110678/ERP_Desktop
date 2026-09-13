@@ -388,8 +388,9 @@ class CustomerHistoryDialog(QDialog):
             self.sales_table.setItem(row, 0, _cell(s['date'], C_TEXT_MED))
             self.sales_table.setItem(row, 1, _cell(str(s['id']), C_TEXT_MED))
 
-            inv_type = _cell(s.get('invoice_type', 'بيطري'),
-                             C_ORANGE if s.get('invoice_type') == 'أعلاف' else C_TEAL)
+            _itype = s.get('invoice_type', 'بيطري')
+            _icolor = C_ORANGE if _itype == 'أعلاف' else ('#2c3e50' if _itype == 'أخرى' else C_TEAL)
+            inv_type = _cell(_itype, _icolor)
             self.sales_table.setItem(row, 2, inv_type)
 
             total = s['total_amount']

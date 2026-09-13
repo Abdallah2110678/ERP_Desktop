@@ -104,7 +104,7 @@ class NewSaleDialog(QDialog):
         pay_lbl_top.setStyleSheet(f"color: {C_TEXT_DARK}; font-size: 12px; font-weight: bold;")
 
         self.invoice_type = QComboBox()
-        self.invoice_type.addItems(["بيطري", "أعلاف"])
+        self.invoice_type.addItems(["بيطري", "أعلاف", "أخرى"])
         self.invoice_type.setStyleSheet(INPUT_STYLE)
         self.invoice_type.setFixedWidth(120)
         inv_lbl_top = QLabel("نوع الفاتورة:")
