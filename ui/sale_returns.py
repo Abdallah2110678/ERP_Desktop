@@ -9,7 +9,7 @@ import database as db
 from ui.styles import (
     TABLE_STYLE, BTN_EDIT, BTN_SECONDARY,
     DIALOG_STYLE, PAGE_STYLE, INPUT_STYLE, card_shadow, style_calendar,
-    show_info, show_warning,
+    show_info, show_warning, setup_searchable_combo,
     C_TEXT_DARK, C_TEXT_MED, C_PRIMARY, C_DANGER, C_PURPLE,
 )
 from ui.products import page_header
@@ -51,12 +51,14 @@ class NewSaleReturnDialog(QDialog):
         self.customer_combo = QComboBox()
         self.customer_combo.setMinimumWidth(280)
         self.customer_combo.setStyleSheet(INPUT_STYLE)
+        setup_searchable_combo(self.customer_combo)
+        self.customer_combo.lineEdit().setPlaceholderText("ابحث باسم العميل...")
         cust_row.addWidget(self.customer_combo)
         cust_row.addWidget(QLabel("العميل:"))
         cust_row.addSpacing(16)
 
         self.inv_type_combo = QComboBox()
-        self.inv_type_combo.addItems(["بيطري", "أعلاف", "أخرى"])
+        self.inv_type_combo.addItems(["بيطري", "أعلاف", "نثريات"])
         self.inv_type_combo.setStyleSheet(INPUT_STYLE)
         self.inv_type_combo.setFixedWidth(110)
         cust_row.addWidget(self.inv_type_combo)
@@ -92,6 +94,7 @@ class NewSaleReturnDialog(QDialog):
         self.product_combo.setEditable(True)
         self.product_combo.lineEdit().setPlaceholderText("اكتب اسم الصنف...")
         self.product_combo.currentIndexChanged.connect(self._on_product_changed)
+        setup_searchable_combo(self.product_combo)
 
         self.unit_input = QLineEdit()
         self.unit_input.setFixedWidth(110)

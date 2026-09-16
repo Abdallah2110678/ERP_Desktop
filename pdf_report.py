@@ -310,7 +310,7 @@ def generate_customer_statement(customer_id: int, date_from: str, date_to: str) 
     total_sales    = sum(s['total_amount'] for s in sales)
     total_paid     = sum(s['paid_amount']  for s in sales)
     total_payments = sum(p['amount']       for p in payments)
-    remaining_debt = customer['total_debt']
+    remaining_debt = max(0.0, total_sales - total_paid - total_payments)
 
     tmp = tempfile.NamedTemporaryFile(
         suffix=".pdf",
@@ -417,10 +417,10 @@ def generate_customer_account(customer_id: int, date_from: str, date_to: str) ->
 
     vet_sales     = [s for s in sales   if s.get('invoice_type', 'بيطري') == 'بيطري']
     feed_sales    = [s for s in sales   if s.get('invoice_type', 'بيطري') == 'أعلاف']
-    other_sales   = [s for s in sales   if s.get('invoice_type', 'بيطري') not in ('بيطري', 'أعلاف')]
+    other_sales   = [s for s in sales   if s.get('invoice_type', 'بيطري') in ('نثريات', 'أخرى')]
     vet_returns   = [r for r in returns if r.get('invoice_type', 'بيطري') == 'بيطري']
     feed_returns  = [r for r in returns if r.get('invoice_type', 'بيطري') == 'أعلاف']
-    other_returns = [r for r in returns if r.get('invoice_type', 'بيطري') not in ('بيطري', 'أعلاف')]
+    other_returns = [r for r in returns if r.get('invoice_type', 'بيطري') in ('نثريات', 'أخرى')]
 
     total_sales    = sum(s['total_amount'] for s in sales)
     total_returns  = sum(r['total_amount'] for r in returns)
@@ -444,7 +444,7 @@ def generate_customer_account(customer_id: int, date_from: str, date_to: str) ->
     c.rect(ML, y - box_h, TW, box_h, fill=1, stroke=1)
     c.setFillColor(BLACK)
     _rtext(c, f"العميل :  {customer['name']}", MR - 8, y - 14, "ArBold", 11)
-    _ltext(c, f"الرصيد الكلي :  {customer['total_debt']:.2f} ج.م", ML + 8, y - 14, "ArBold", 11)
+    _ltext(c, f"المستحق في الفترة :  {owed:.2f} ج.م", ML + 8, y - 14, "ArBold", 11)
     y -= box_h + 14
 
     def _sales_section(title, items):
@@ -477,10 +477,10 @@ def generate_customer_account(customer_id: int, date_from: str, date_to: str) ->
 
     _sales_section("مبيعات بيطري", vet_sales)
     _sales_section("مبيعات أعلاف", feed_sales)
-    _sales_section("مبيعات أخرى", other_sales)
+    _sales_section("مبيعات نثريات", other_sales)
     _returns_section("مرتجعات بيطري", vet_returns)
     _returns_section("مرتجعات أعلاف", feed_returns)
-    _returns_section("مرتجعات أخرى", other_returns)
+    _returns_section("مرتجعات نثريات", other_returns)
 
     # Payments table
     if payments:
@@ -698,7 +698,19 @@ def generate_supplier_statement(supplier_id: int, date_from: str, date_to: str) 
     total_purchases  = sum(p['total_amount'] for p in purchases)
     total_paid_inv   = sum(p.get('paid_amount') or 0 for p in purchases)
     total_payments   = sum(p['amount'] for p in payments)
-    remaining_debt   = supplier['total_debt']
+    remaining_debt   = max(0.0, total_purchases - total_paid_inv - total_payments)
+
+    from datetime import date as _date, timedelta as _td
+    today_str = _date.today().isoformat()
+    due_invoices = [
+        p for p in purchases
+        if p.get('payment_due_date') and
+           max(0.0, p['total_amount'] - (p.get('paid_amount') or 0)) > 0
+    ]
+    total_due_amount = sum(
+        max(0.0, p['total_amount'] - (p.get('paid_amount') or 0))
+        for p in due_invoices
+    )
 
     tmp = tempfile.NamedTemporaryFile(
         suffix=".pdf",
@@ -718,7 +730,7 @@ def generate_supplier_statement(supplier_id: int, date_from: str, date_to: str) 
     c.setFillColor(BLACK)
     _rtext(c, f"الاسم :  {supplier['name']}",               MR - 8, y - 14, "ArBold", 11)
     _rtext(c, f"الهاتف :  {supplier.get('phone') or '—'}",  MR - 8, y - 30, "Ar",     10)
-    _ltext(c, f"المستحق الكلي :  {remaining_debt:.2f} ج.م", ML + 8, y - 14, "ArBold", 11)
+    _ltext(c, f"المستحق في الفترة :  {remaining_debt:.2f} ج.م", ML + 8, y - 14, "ArBold", 11)
     y -= box_h + 16
 
     # Purchases — one invoice block per purchase
@@ -735,9 +747,45 @@ def generate_supplier_statement(supplier_id: int, date_from: str, date_to: str) 
                                     p['total_amount'], paid_amt, rem,
                                     p.get('payment_type', 'cash'),
                                     "كشف حساب مورد")
+            if p.get('payment_due_date') and rem > 0:
+                due = p['payment_due_date']
+                label = f"  تاريخ السداد: {due}"
+                if due < today_str:
+                    label += "  *** متأخر ***"
+                _rtext(c, label, MR, y, "ArBold", 9)
+                y -= 14
 
         _rtext(c,
                f"اجمالي الفواتير: {total_purchases:.2f}    |    اجمالي المدفوع: {total_paid_inv:.2f}  ج.م",
+               MR, y, "ArBold", 10)
+        y -= 22
+
+    # Due payments section
+    if due_invoices:
+        y = _maybe_new_page(c, y, 100, "كشف حساب مورد")
+        _rtext(c, "المبالغ المستحقة بتواريخ السداد", MR, y, "ArBold", 12)
+        y -= 8;  _hline(c, y, width=0.8);  y -= 14
+
+        DCW  = [200, 120, 105]
+        DCX  = _col_xs(DCW)
+        DHDR = [("المتبقي ج.م", "c"), ("تاريخ السداد", "c"), ("رقم الفاتورة", "c")]
+        y = _draw_table_header(c, y, DHDR, DCX, DCW)
+
+        for i, p in enumerate(sorted(due_invoices, key=lambda x: x.get('payment_due_date', ''))):
+            rem = max(0.0, p['total_amount'] - (p.get('paid_amount') or 0))
+            due = p['payment_due_date']
+            status = "متأخر" if due < today_str else due
+            drow = [
+                (f"{rem:.2f}", "c"),
+                (status, "c"),
+                (f"# {p['id']}", "c"),
+            ]
+            _draw_row(c, y, drow, DCX, DCW, shaded=(i % 2 == 0), bold_cols={0})
+            y -= ROW_H
+            y = _maybe_new_page(c, y, 90, "كشف حساب مورد")
+
+        y -= 4
+        _rtext(c, f"اجمالي المستحق بتواريخ السداد: {total_due_amount:.2f} ج.م",
                MR, y, "ArBold", 10)
         y -= 22
 
@@ -770,7 +818,7 @@ def generate_supplier_statement(supplier_id: int, date_from: str, date_to: str) 
     y = _maybe_new_page(c, y, 145, "كشف حساب مورد")
     y -= 8;  _hline(c, y, width=1.2);  y -= 14
 
-    sum_h = 68
+    sum_h = 84 if due_invoices else 68
     c.setFillColor(LIGHT_GRAY);  c.setStrokeColor(DARK_GRAY);  c.setLineWidth(0.8)
     c.rect(ML, y - sum_h, TW, sum_h, fill=1, stroke=1)
     c.setFillColor(BLACK)
@@ -781,6 +829,9 @@ def generate_supplier_statement(supplier_id: int, date_from: str, date_to: str) 
            MR - 10, y - 46, "Ar", 10.5)
     _rtext(c, f"المستحق الكلي للمورد :                    {remaining_debt:.2f} ج.م",
            MR - 10, y - 62, "ArBold", 11)
+    if due_invoices:
+        _rtext(c, f"اجمالي المبالغ المستحقة بتواريخ السداد :  {total_due_amount:.2f} ج.م",
+               MR - 10, y - 78, "ArBold", 11)
 
     c.setFont("Ar", 8);  c.setFillColor(MID_GRAY)
     c.drawString(ML + 4, y - sum_h - 12,
@@ -940,6 +991,96 @@ def generate_product_report(product_id: int, date_from: str, date_to: str) -> st
     c.drawString(ML + 4, y - sum_h - 12, _ar("   |   ".join(notes)))
 
     _draw_footer(c, FOOTER)
+    c.save()
+    return tmp.name
+
+
+# =============================================================================
+# 6.  Single sale invoice
+# =============================================================================
+def generate_sale_invoice(sale_id: int) -> str:
+    sale  = db.get_sale(sale_id)
+    if not sale:
+        return None
+    items = db.get_sale_items(sale_id)
+
+    tmp = tempfile.NamedTemporaryFile(
+        suffix=".pdf", prefix=f"sale_invoice_{sale_id}_", delete=False)
+    tmp.close()
+    c = rl_canvas.Canvas(tmp.name, pagesize=A4)
+
+    subtitle = f"فاتورة رقم  # {sale_id}   —   {sale['date']}"
+    y = _draw_page_header(c, "فاتورة بيع", subtitle)
+
+    # Info box
+    box_h = 52
+    c.setFillColor(LIGHT_GRAY);  c.setStrokeColor(DARK_GRAY);  c.setLineWidth(0.8)
+    c.rect(ML, y - box_h, TW, box_h, fill=1, stroke=1)
+    c.setFillColor(BLACK)
+    _rtext(c, f"العميل :  {sale['customer_name']}", MR - 8, y - 14, "ArBold", 11)
+    pay_ar = PAY_MAP_AR.get(sale.get('payment_type', ''), '—')
+    inv_type = sale.get('invoice_type', '—') or '—'
+    _ltext(c, f"نوع الفاتورة :  {inv_type}   |   طريقة الدفع :  {pay_ar}", ML + 8, y - 14, "Ar", 10)
+    _rtext(c, f"الإجمالي :  {sale['total_amount']:.2f} ج.م   |   المدفوع :  {sale.get('paid_amount', 0):.2f} ج.م   |   المتبقي :  {sale.get('remaining', 0):.2f} ج.م",
+           MR - 8, y - 30, "Ar", 10)
+    if sale.get('notes'):
+        _rtext(c, f"ملاحظات :  {sale['notes']}", MR - 8, y - 46, "Ar", 9.5)
+    y -= box_h + 14
+
+    y = _draw_invoice_block(c, y, sale['date'], items,
+                            sale['total_amount'], sale.get('paid_amount', 0),
+                            sale.get('remaining', 0), sale.get('payment_type', 'cash'),
+                            "فاتورة بيع")
+
+    _draw_footer(c, "فاتورة بيع")
+    c.save()
+    return tmp.name
+
+
+# =============================================================================
+# 7.  Single purchase invoice
+# =============================================================================
+def generate_purchase_invoice(purchase_id: int) -> str:
+    purchase = db.get_purchase(purchase_id)
+    if not purchase:
+        return None
+    items = db.get_purchase_items(purchase_id)
+
+    tmp = tempfile.NamedTemporaryFile(
+        suffix=".pdf", prefix=f"purchase_invoice_{purchase_id}_", delete=False)
+    tmp.close()
+    c = rl_canvas.Canvas(tmp.name, pagesize=A4)
+
+    subtitle = f"فاتورة رقم  # {purchase_id}   —   {purchase['date']}"
+    y = _draw_page_header(c, "فاتورة شراء", subtitle)
+
+    # Info box
+    box_h = 52
+    c.setFillColor(LIGHT_GRAY);  c.setStrokeColor(DARK_GRAY);  c.setLineWidth(0.8)
+    c.rect(ML, y - box_h, TW, box_h, fill=1, stroke=1)
+    c.setFillColor(BLACK)
+    supplier = purchase.get('supplier') or '—'
+    _rtext(c, f"المورد :  {supplier}", MR - 8, y - 14, "ArBold", 11)
+    pay_ar   = PAY_MAP_AR.get(purchase.get('payment_type', ''), '—')
+    inv_type = purchase.get('invoice_type', '—') or '—'
+    _ltext(c, f"نوع الفاتورة :  {inv_type}   |   طريقة الدفع :  {pay_ar}", ML + 8, y - 14, "Ar", 10)
+    paid      = purchase.get('paid_amount') or 0
+    remaining = max(0.0, purchase['total_amount'] - paid)
+    _rtext(c, f"الإجمالي :  {purchase['total_amount']:.2f} ج.م   |   المدفوع :  {paid:.2f} ج.م   |   المتبقي :  {remaining:.2f} ج.م",
+           MR - 8, y - 30, "Ar", 10)
+    due = purchase.get('payment_due_date')
+    if due:
+        _ltext(c, f"تاريخ السداد :  {due}", ML + 8, y - 30, "Ar", 10)
+    if purchase.get('notes'):
+        _rtext(c, f"ملاحظات :  {purchase['notes']}", MR - 8, y - 46, "Ar", 9.5)
+    y -= box_h + 14
+
+    pay_type = purchase.get('payment_type', 'cash')
+    y = _draw_invoice_block(c, y, purchase['date'], items,
+                            purchase['total_amount'], paid, remaining,
+                            pay_type, "فاتورة شراء")
+
+    _draw_footer(c, "فاتورة شراء")
     c.save()
     return tmp.name
 

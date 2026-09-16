@@ -2,6 +2,7 @@ import sqlite3
 import hashlib
 import os
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 
@@ -195,6 +196,7 @@ def init_db():
         "ALTER TABLE products ADD COLUMN product_type TEXT DEFAULT 'بيطري'",
         "ALTER TABLE sale_items ADD COLUMN unit_name TEXT DEFAULT ''",
         "ALTER TABLE purchase_items ADD COLUMN unit_name TEXT DEFAULT ''",
+        "ALTER TABLE purchases ADD COLUMN payment_due_date TEXT",
     ]:
         try:
             conn.execute(col_sql)
@@ -525,6 +527,13 @@ def get_all_sales():
     return [dict(r) for r in rows]
 
 
+def get_sale(sale_id):
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM sales WHERE id=?", (sale_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def get_sale_items(sale_id):
     conn = get_connection()
     rows = conn.execute("SELECT * FROM sale_items WHERE sale_id=?", (sale_id,)).fetchall()
@@ -765,6 +774,7 @@ def get_supplier_account(supplier_id, date_from, date_to):
                COALESCE(p.paid_amount, 0) as paid_amount,
                COALESCE(p.payment_type, 'cash') as payment_type,
                COALESCE(p.invoice_type, 'بيطري') as invoice_type, p.supplier as supplier_name,
+               p.payment_due_date,
                GROUP_CONCAT(pi.product_name || ' ×' || pi.quantity, ', ') as items_summary
         FROM purchases p
         LEFT JOIN purchase_items pi ON pi.purchase_id = p.id
@@ -796,15 +806,15 @@ def get_supplier_account(supplier_id, date_from, date_to):
     }
 
 
-def create_purchase(supplier_id, supplier_name, items, total_amount, paid_amount, payment_type, notes, invoice_type='بيطري'):
+def create_purchase(supplier_id, supplier_name, items, total_amount, paid_amount, payment_type, notes, invoice_type='بيطري', payment_due_date=None):
     remaining = max(0.0, total_amount - paid_amount)
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute(
-        """INSERT INTO purchases (supplier_id, supplier, total_amount, paid_amount, payment_type, invoice_type, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (supplier_id, supplier_name, total_amount, paid_amount, payment_type, invoice_type, notes)
+        """INSERT INTO purchases (supplier_id, supplier, total_amount, paid_amount, payment_type, invoice_type, notes, payment_due_date)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (supplier_id, supplier_name, total_amount, paid_amount, payment_type, invoice_type, notes, payment_due_date)
     )
     purchase_id = cursor.lastrowid
 
@@ -845,9 +855,112 @@ def get_all_purchases():
     return [dict(r) for r in rows]
 
 
+def get_purchase(purchase_id):
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM purchases WHERE id=?", (purchase_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def get_purchase_items(purchase_id):
     conn = get_connection()
     rows = conn.execute("SELECT * FROM purchase_items WHERE purchase_id=?", (purchase_id,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_upcoming_due_payments(days_ahead=2):
+    """Return purchases whose payment_due_date is today or within days_ahead that still have remaining balance."""
+    conn = get_connection()
+    today_str = date.today().isoformat()
+    limit_str = (date.today() + timedelta(days=days_ahead)).isoformat()
+    rows = conn.execute("""
+        SELECT p.*, COALESCE(s.name, p.supplier) AS supplier_display
+        FROM purchases p
+        LEFT JOIN suppliers s ON p.supplier_id = s.id
+        WHERE p.payment_due_date IS NOT NULL
+          AND p.payment_due_date <= ?
+          AND p.paid_amount < p.total_amount
+        ORDER BY p.payment_due_date ASC
+    """, (limit_str,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_supplier_outstanding_invoices(supplier_id):
+    """Return all purchases with remaining balance for a supplier."""
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT p.id, p.date, p.total_amount,
+               COALESCE(p.paid_amount, 0) AS paid_amount,
+               (p.total_amount - COALESCE(p.paid_amount, 0)) AS remaining,
+               p.payment_due_date, p.invoice_type,
+               GROUP_CONCAT(pi.product_name, '، ') AS items_summary
+        FROM purchases p
+        LEFT JOIN purchase_items pi ON pi.purchase_id = p.id
+        WHERE p.supplier_id = ?
+          AND (p.total_amount - COALESCE(p.paid_amount, 0)) > 0.001
+        GROUP BY p.id
+        ORDER BY p.date ASC, p.id ASC
+    """, (supplier_id,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_customer_outstanding_invoices(customer_id):
+    """Return all sales with remaining balance for a customer."""
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT s.id, s.date, s.total_amount, s.paid_amount, s.remaining,
+               s.invoice_type, s.payment_type,
+               GROUP_CONCAT(si.product_name, '، ') AS items_summary
+        FROM sales s
+        LEFT JOIN sale_items si ON si.sale_id = s.id
+        WHERE s.customer_id = ? AND s.remaining > 0.001
+        GROUP BY s.id
+        ORDER BY s.date ASC, s.id ASC
+    """, (customer_id,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def apply_payment_to_purchase(purchase_id, amount):
+    """Update paid_amount on a specific purchase invoice."""
+    conn = get_connection()
+    conn.execute("""
+        UPDATE purchases
+        SET paid_amount = MIN(total_amount, COALESCE(paid_amount, 0) + ?)
+        WHERE id = ?
+    """, (amount, purchase_id))
+    conn.commit()
+    conn.close()
+
+
+def apply_payment_to_sale(sale_id, amount):
+    """Update paid_amount and remaining on a specific sale invoice."""
+    conn = get_connection()
+    conn.execute("""
+        UPDATE sales
+        SET paid_amount = MIN(total_amount, COALESCE(paid_amount, 0) + ?),
+            remaining   = MAX(0, remaining - ?)
+        WHERE id = ?
+    """, (amount, amount, sale_id))
+    conn.commit()
+    conn.close()
+
+
+def get_supplier_due_summary(supplier_id):
+    """Return all unpaid/partial purchases for a supplier with their due dates."""
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT id, date, total_amount, paid_amount, payment_due_date,
+               (total_amount - COALESCE(paid_amount, 0)) AS remaining
+        FROM purchases
+        WHERE supplier_id = ?
+          AND paid_amount < total_amount
+          AND payment_due_date IS NOT NULL
+        ORDER BY payment_due_date ASC
+    """, (supplier_id,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 

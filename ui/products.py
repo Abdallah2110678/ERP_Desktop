@@ -101,7 +101,7 @@ class ProductDialog(QDialog):
         form.addRow("سعر البيع:", self.selling_price_input)
 
         self.type_combo = QComboBox()
-        self.type_combo.addItems(["بيطري", "أعلاف", "أخرى"])
+        self.type_combo.addItems(["بيطري", "أعلاف", "نثريات"])
         self.type_combo.setStyleSheet(INPUT_STYLE)
         form.addRow("نوع الصنف:", self.type_combo)
 
@@ -172,7 +172,7 @@ class ProductDialog(QDialog):
             self.purchase_price_input.setValue(self.product['purchase_price'])
             self.selling_price_input.setValue(self.product['selling_price'])
             ptype = self.product.get('product_type', 'بيطري')
-            self.type_combo.setCurrentIndex(0 if ptype == 'بيطري' else 1)
+            self.type_combo.setCurrentIndex({"بيطري": 0, "أعلاف": 1, "نثريات": 2, "أخرى": 2}.get(ptype, 0))
 
             # Pre-populate expiry from existing batches
             expiry_map = db.get_product_nearest_expiries()
@@ -329,7 +329,7 @@ class ProductsPage(QWidget):
             ptype = p.get('product_type', 'بيطري')
             type_item = QTableWidgetItem(ptype)
             type_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            type_item.setForeground(QColor(C_ORANGE if ptype == 'أعلاف' else ('#2c3e50' if ptype == 'أخرى' else '#16a085')))
+            type_item.setForeground(QColor(C_ORANGE if ptype == 'أعلاف' else ('#2c3e50' if ptype in ('نثريات', 'أخرى') else '#16a085')))
             self.table.setItem(row, 5, type_item)
 
             unit_item = QTableWidgetItem(p['unit'])

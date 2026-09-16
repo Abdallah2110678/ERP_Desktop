@@ -11,7 +11,7 @@ from PyQt6.QtGui import QColor, QFont
 import database as db
 from ui.styles import (
     TABLE_STYLE, BTN_ADD,
-    PAGE_STYLE, INPUT_STYLE, card_shadow, style_calendar,
+    PAGE_STYLE, INPUT_STYLE, card_shadow, style_calendar, setup_searchable_combo,
     C_TEXT_DARK, C_TEXT_MED, C_PRIMARY, C_DANGER, C_ORANGE, C_PURPLE,
 )
 from ui.products import page_header
@@ -70,6 +70,8 @@ class ProductReportPage(QWidget):
         self.product_combo = QComboBox()
         self.product_combo.setMinimumWidth(230)
         self.product_combo.setStyleSheet(INPUT_STYLE)
+        setup_searchable_combo(self.product_combo)
+        self.product_combo.lineEdit().setPlaceholderText("ابحث باسم الصنف...")
 
         from_lbl = QLabel("من:")
         from_lbl.setFixedWidth(30)

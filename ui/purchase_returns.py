@@ -9,7 +9,7 @@ import database as db
 from ui.styles import (
     TABLE_STYLE, BTN_EDIT, BTN_SECONDARY, BTN_ORANGE,
     DIALOG_STYLE, PAGE_STYLE, INPUT_STYLE, card_shadow, style_calendar,
-    show_info, show_warning,
+    show_info, show_warning, setup_searchable_combo,
     C_TEXT_DARK, C_TEXT_MED, C_DANGER, C_ORANGE,
 )
 from ui.products import page_header
@@ -51,12 +51,13 @@ class NewPurchaseReturnDialog(QDialog):
         self.supplier_combo.setMinimumWidth(220)
         self.supplier_combo.setStyleSheet(INPUT_STYLE)
         self.supplier_combo.lineEdit().setPlaceholderText("اختر مورداً...")
+        setup_searchable_combo(self.supplier_combo)
         sup_row.addWidget(self.supplier_combo)
         sup_row.addWidget(QLabel("المورد:"))
         sup_row.addSpacing(16)
 
         self.inv_type_combo = QComboBox()
-        self.inv_type_combo.addItems(["بيطري", "أعلاف", "أخرى"])
+        self.inv_type_combo.addItems(["بيطري", "أعلاف", "نثريات"])
         self.inv_type_combo.setStyleSheet(INPUT_STYLE)
         self.inv_type_combo.setFixedWidth(110)
         sup_row.addWidget(self.inv_type_combo)
@@ -92,6 +93,7 @@ class NewPurchaseReturnDialog(QDialog):
         self.product_combo.setEditable(True)
         self.product_combo.lineEdit().setPlaceholderText("اكتب اسم الصنف...")
         self.product_combo.currentIndexChanged.connect(self._on_product_changed)
+        setup_searchable_combo(self.product_combo)
 
         self.unit_input = QLineEdit()
         self.unit_input.setFixedWidth(110)

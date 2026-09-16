@@ -9,7 +9,7 @@ import database as db
 from ui.styles import (
     TABLE_STYLE, BTN_ADD, BTN_DELETE, BTN_SECONDARY,
     PAGE_STYLE, INPUT_STYLE, card_shadow,
-    show_info, show_warning, confirm_delete, style_calendar,
+    show_info, show_warning, confirm_delete, style_calendar, setup_searchable_combo,
     C_TEXT_DARK, C_TEXT_MED, C_PRIMARY, C_DANGER, C_ORANGE,
 )
 from ui.products import page_header
@@ -54,6 +54,8 @@ class PaymentsPage(QWidget):
         self.entity_combo.setMinimumWidth(240)
         self.entity_combo.setStyleSheet(INPUT_STYLE)
         self.entity_combo.currentIndexChanged.connect(self._on_entity_changed)
+        setup_searchable_combo(self.entity_combo)
+        self.entity_combo.lineEdit().setPlaceholderText("ابحث باسم العميل أو المورد...")
 
         self.entity_badge = QLabel()
         self.entity_badge.setFixedWidth(50)
@@ -83,6 +85,43 @@ class PaymentsPage(QWidget):
         row1.addSpacing(8)
         row1.addWidget(self.balance_for_lbl)
         form_layout.addLayout(row1)
+
+        # Invoice row (shown only when entity has outstanding invoices)
+        self.inv_frame = QFrame()
+        self.inv_frame.setStyleSheet("""
+            QFrame {
+                background: #f0fff8;
+                border-radius: 8px;
+                border: 1px solid #a9dfbf;
+            }
+            QLabel { background: transparent; border: none; }
+        """)
+        inv_layout = QHBoxLayout(self.inv_frame)
+        inv_layout.setContentsMargins(12, 10, 12, 10)
+        inv_layout.setSpacing(10)
+
+        inv_lbl = QLabel("📄  الفاتورة:")
+        inv_lbl.setStyleSheet(f"color: {C_TEXT_DARK}; font-size: 12px; font-weight: bold;")
+        inv_lbl.setFixedWidth(100)
+
+        self._outstanding_invoices = []
+        self.invoice_combo = QComboBox()
+        self.invoice_combo.setMinimumWidth(420)
+        self.invoice_combo.setStyleSheet(INPUT_STYLE)
+        setup_searchable_combo(self.invoice_combo)
+        self.invoice_combo.currentIndexChanged.connect(self._on_invoice_changed)
+
+        self.inv_remaining_lbl = QLabel()
+        self.inv_remaining_lbl.setFont(QFont("Tahoma", 12, QFont.Weight.Bold))
+        self.inv_remaining_lbl.setStyleSheet(f"color: {C_DANGER}; background: transparent; border: none;")
+
+        inv_layout.addWidget(inv_lbl)
+        inv_layout.addWidget(self.invoice_combo)
+        inv_layout.addSpacing(10)
+        inv_layout.addWidget(self.inv_remaining_lbl)
+        inv_layout.addStretch()
+        self.inv_frame.hide()
+        form_layout.addWidget(self.inv_frame)
 
         # Row 2: date + amount + notes
         row2 = QHBoxLayout()
@@ -181,7 +220,7 @@ class PaymentsPage(QWidget):
 
         self.entity_combo.blockSignals(True)
         self.entity_combo.clear()
-        self.entity_combo.addItem("-- اختر عميل أو مورد --", None)
+        self.entity_combo.addItem("", None)
 
         for c in customers:
             self._entity_list.append({'id': c['id'], 'name': c['name'], 'type': 'customer', 'debt': c['total_debt']})
@@ -197,6 +236,7 @@ class PaymentsPage(QWidget):
         data = self.entity_combo.currentData()
         if not data:
             self.entity_badge.hide()
+            self.inv_frame.hide()
             self.balance_against_lbl.setText("عليه: 0.00 ج.م")
             self.balance_for_lbl.setText("له: 0.00 ج.م")
             self.balance_against_lbl.setStyleSheet(
@@ -241,6 +281,43 @@ class PaymentsPage(QWidget):
                 f"color: {C_PRIMARY}; background: #f0fff8; border-radius: 8px; padding: 4px 12px; font-size: 13px; font-weight: bold;"
             )
 
+        self._load_outstanding_invoices(etype, eid)
+
+    def _load_outstanding_invoices(self, etype, eid):
+        self._outstanding_invoices = []
+        if etype == 'supplier':
+            invoices = db.get_supplier_outstanding_invoices(eid)
+        else:
+            invoices = db.get_customer_outstanding_invoices(eid)
+
+        if not invoices:
+            self.inv_frame.hide()
+            return
+
+        self.invoice_combo.blockSignals(True)
+        self.invoice_combo.clear()
+        self.invoice_combo.addItem("— دفعة عامة (بدون تحديد فاتورة) —", None)
+        self._outstanding_invoices = invoices
+        for inv in invoices:
+            due = f"  |  تسديد: {inv['payment_due_date']}" if inv.get('payment_due_date') else ""
+            summary = inv.get('items_summary') or ''
+            summary_part = f"  |  {summary[:30]}{'…' if len(summary) > 30 else ''}" if summary else ''
+            label = f"فاتورة #{inv['id']}  |  {inv['date']}  |  المتبقي: {inv['remaining']:.2f} ج.م{due}{summary_part}"
+            self.invoice_combo.addItem(label, inv['id'])
+        self.invoice_combo.blockSignals(False)
+        self.inv_remaining_lbl.setText("")
+        self.inv_frame.show()
+
+    def _on_invoice_changed(self, index):
+        inv_id = self.invoice_combo.currentData()
+        if not inv_id:
+            self.inv_remaining_lbl.setText("")
+            return
+        inv = next((i for i in self._outstanding_invoices if i['id'] == inv_id), None)
+        if inv:
+            self.amount_spin.setValue(inv['remaining'])
+            self.inv_remaining_lbl.setText(f"المتبقي: {inv['remaining']:.2f} ج.م")
+
     def _add_payment(self):
         data = self.entity_combo.currentData()
         if not data:
@@ -255,19 +332,27 @@ class PaymentsPage(QWidget):
         notes = self.notes_input.text().strip()
         date = self.date_edit.date().toString("yyyy-MM-dd")
 
+        inv_id = self.invoice_combo.currentData() if self.inv_frame.isVisible() else None
+
         if etype == 'customer':
             db.add_payment(eid, amount, notes, date)
+            if inv_id:
+                db.apply_payment_to_sale(inv_id, amount)
         else:
             db.add_supplier_payment(eid, amount, notes, date)
+            if inv_id:
+                db.apply_payment_to_purchase(inv_id, amount)
 
         entity = next((e for e in self._entity_list if e['id'] == eid and e['type'] == etype), None)
         name = entity['name'] if entity else ""
-        show_info(self, "تم", f"✓ تم تسجيل دفعة {amount:.2f} ج.م لـ {name}")
+        inv_note = f"\nمُقيَّد على فاتورة #{inv_id}" if inv_id else ""
+        show_info(self, "تم", f"✓ تم تسجيل دفعة {amount:.2f} ج.م لـ {name}{inv_note}")
 
         self.amount_spin.setValue(0)
         self.notes_input.clear()
+        self.inv_frame.hide()
+        self._outstanding_invoices = []
         self._load_entities()
-        # Restore selection
         self.entity_combo.setCurrentIndex(0)
         self.load_payments()
 

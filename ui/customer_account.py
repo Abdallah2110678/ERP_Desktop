@@ -8,7 +8,7 @@ from PyQt6.QtGui import QColor, QFont
 import database as db
 from ui.styles import (
     TABLE_STYLE, BTN_ADD, BTN_SECONDARY,
-    PAGE_STYLE, INPUT_STYLE, card_shadow, style_calendar,
+    PAGE_STYLE, INPUT_STYLE, card_shadow, style_calendar, setup_searchable_combo,
     C_TEXT_DARK, C_TEXT_MED, C_PRIMARY, C_DANGER, C_ORANGE, C_PURPLE,
 )
 from ui.products import page_header
@@ -55,6 +55,8 @@ class CustomerAccountPage(QWidget):
         self.customer_combo = QComboBox()
         self.customer_combo.setMinimumWidth(200)
         self.customer_combo.setStyleSheet(INPUT_STYLE)
+        setup_searchable_combo(self.customer_combo)
+        self.customer_combo.lineEdit().setPlaceholderText("ابحث باسم العميل...")
 
         # Date range
         date_from_lbl = QLabel("من:")

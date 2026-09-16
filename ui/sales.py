@@ -7,10 +7,11 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QColor, QFont
 import database as db
+import pdf_report
 from ui.styles import (
     TABLE_STYLE, BTN_ADD, BTN_EDIT, BTN_SECONDARY, BTN_ORANGE,
     DIALOG_STYLE, PAGE_STYLE, INPUT_STYLE, card_shadow, style_calendar,
-    show_info, show_warning, show_error,
+    show_info, show_warning, show_error, setup_searchable_combo,
     C_TEXT_DARK, C_TEXT_MED, C_PRIMARY, C_DANGER, C_ORANGE,
 )
 from ui.products import page_header
@@ -104,7 +105,7 @@ class NewSaleDialog(QDialog):
         pay_lbl_top.setStyleSheet(f"color: {C_TEXT_DARK}; font-size: 12px; font-weight: bold;")
 
         self.invoice_type = QComboBox()
-        self.invoice_type.addItems(["بيطري", "أعلاف", "أخرى"])
+        self.invoice_type.addItems(["بيطري", "أعلاف", "نثريات"])
         self.invoice_type.setStyleSheet(INPUT_STYLE)
         self.invoice_type.setFixedWidth(120)
         inv_lbl_top = QLabel("نوع الفاتورة:")
@@ -150,6 +151,7 @@ class NewSaleDialog(QDialog):
         self.product_combo.setEditable(True)
         self.product_combo.lineEdit().setPlaceholderText("اكتب اسم الدواء...")
         self.product_combo.currentIndexChanged.connect(self._on_product_changed)
+        setup_searchable_combo(self.product_combo)
 
         self.unit_input = QLineEdit()
         self.unit_input.setFixedWidth(110)
@@ -470,11 +472,123 @@ class NewSaleDialog(QDialog):
         self.accept()
 
 
+class SaleDetailDialog(QDialog):
+    def __init__(self, sale, items, parent=None):
+        super().__init__(parent)
+        self._sale_id = sale['id']
+        self.setWindowTitle(f"تفاصيل الفاتورة # {sale['id']}")
+        self.resize(700, 520)
+        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        self.setStyleSheet(DIALOG_STYLE + TABLE_STYLE)
+        self._build(sale, items)
+
+    def _build(self, sale, items):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        type_map = {'cash': 'نقدي', 'credit': 'آجل', 'partial': 'جزئي'}
+
+        info = QFrame()
+        info.setStyleSheet("background:#f8f9fa; border-radius:8px; border:1px solid #dce3ec;")
+        ig = QHBoxLayout(info)
+        ig.setContentsMargins(16, 12, 16, 12)
+        ig.setSpacing(28)
+
+        def _col(label, value, color=None):
+            w = QWidget()
+            v = QVBoxLayout(w)
+            v.setContentsMargins(0, 0, 0, 0)
+            v.setSpacing(3)
+            lbl = QLabel(label)
+            lbl.setStyleSheet(f"color: {C_TEXT_MED}; font-size: 11px;")
+            val = QLabel(value)
+            val.setStyleSheet(f"color: {color or C_TEXT_DARK}; font-size: 13px; font-weight: bold;")
+            v.addWidget(lbl)
+            v.addWidget(val)
+            return w
+
+        ig.addWidget(_col("رقم الفاتورة", f"# {sale['id']}", C_PRIMARY))
+        ig.addWidget(_col("التاريخ", sale['date']))
+        ig.addWidget(_col("العميل", sale['customer_name']))
+        ig.addWidget(_col("نوع", sale.get('invoice_type', '—')))
+        ig.addWidget(_col("الدفع", type_map.get(sale.get('payment_type', ''), '—')))
+        if sale.get('notes'):
+            ig.addWidget(_col("ملاحظات", sale['notes']))
+        ig.addStretch()
+        layout.addWidget(info)
+
+        tbl = QTableWidget()
+        tbl.setColumnCount(5)
+        tbl.setHorizontalHeaderLabels(["المنتج", "الوحدة", "الكمية", "سعر الوحدة (ج.م)", "الإجمالي (ج.م)"])
+        tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        tbl.setAlternatingRowColors(True)
+        tbl.verticalHeader().hide()
+        tbl.setShowGrid(False)
+        tbl.setFrameShape(QFrame.Shape.NoFrame)
+        tbl.setRowCount(len(items))
+        for r, item in enumerate(items):
+            for c, (val, align) in enumerate([
+                (item['product_name'],           Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+                (item.get('unit_name') or '—',   Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
+                (f"{item['quantity']:.2f}",       Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
+                (f"{item['unit_price']:.2f}",     Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
+                (f"{item['total']:.2f}",          Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
+            ]):
+                it = QTableWidgetItem(val)
+                it.setTextAlignment(align)
+                tbl.setItem(r, c, it)
+            tbl.setRowHeight(r, 40)
+        layout.addWidget(tbl)
+
+        summary = QFrame()
+        summary.setStyleSheet("background:#f0f7ff; border-radius:8px; border:1px solid #c8dff8;")
+        sl = QHBoxLayout(summary)
+        sl.setContentsMargins(16, 10, 16, 10)
+        sl.setSpacing(6)
+        for label, value, color in [
+            ("الإجمالي", f"{sale['total_amount']:.2f} ج.م", C_TEXT_DARK),
+            ("المدفوع",  f"{sale['paid_amount']:.2f} ج.م",  C_PRIMARY),
+            ("المتبقي",  f"{sale['remaining']:.2f} ج.م",    C_DANGER if sale['remaining'] > 0 else C_PRIMARY),
+        ]:
+            lbl = QLabel(f"{label}:")
+            lbl.setStyleSheet(f"color: {C_TEXT_MED}; font-size: 12px;")
+            val_lbl = QLabel(value)
+            val_lbl.setStyleSheet(f"color: {color}; font-size: 13px; font-weight: bold; margin-left: 18px;")
+            sl.addWidget(lbl)
+            sl.addWidget(val_lbl)
+        sl.addStretch()
+        layout.addWidget(summary)
+
+        btn_row = QHBoxLayout()
+        print_btn = QPushButton("🖨️  طباعة الفاتورة")
+        print_btn.setStyleSheet(BTN_ADD)
+        print_btn.clicked.connect(self._print)
+        close_btn = QPushButton("إغلاق")
+        close_btn.setStyleSheet(BTN_SECONDARY)
+        close_btn.clicked.connect(self.accept)
+        btn_row.addWidget(print_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)
+
+    def _print(self):
+        try:
+            path = pdf_report.generate_sale_invoice(self._sale_id)
+            if path:
+                pdf_report.open_pdf(path)
+        except Exception as e:
+            show_error(self, "خطأ", f"تعذّر إنشاء الفاتورة:\n{e}")
+
+
 class SalesPage(QWidget):
     def __init__(self):
         super().__init__()
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setStyleSheet(PAGE_STYLE + TABLE_STYLE)
+        self._row_ids = []
+        self._sales_data = {}
         self._setup_ui()
         self.load_sales()
 
@@ -491,40 +605,56 @@ class SalesPage(QWidget):
         new_btn.setStyleSheet(BTN_ADD)
         new_btn.clicked.connect(self._new_sale)
         header_inner.addWidget(new_btn)
+
+        self._toggle_btn = QPushButton("📋  عرض الفواتير")
+        self._toggle_btn.setStyleSheet(BTN_SECONDARY)
+        self._toggle_btn.clicked.connect(self._toggle_bills)
+        header_inner.addWidget(self._toggle_btn)
+
         layout.addWidget(header_frame)
 
-        table_frame = QFrame()
-        table_frame.setStyleSheet("QFrame { background:white; border-radius:12px; border:1px solid #dce3ec; }")
-        card_shadow(table_frame)
-        tl = QVBoxLayout(table_frame)
+        self.table_frame = QFrame()
+        self.table_frame.setStyleSheet("QFrame { background:white; border-radius:12px; border:1px solid #dce3ec; }")
+        card_shadow(self.table_frame)
+        tl = QVBoxLayout(self.table_frame)
         tl.setContentsMargins(0, 0, 0, 0)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(8)
+        self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels([
-            "الإجراءات", "نوع الدفع", "المتبقي (ج.م)", "المدفوع (ج.م)", "الإجمالي (ج.م)", "العميل", "التاريخ", "رقم الفاتورة"
+            "نوع الدفع", "المتبقي (ج.م)", "المدفوع (ج.م)", "الإجمالي (ج.م)", "العميل", "التاريخ", "رقم الفاتورة"
         ])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        self.table.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(0, 120)
-        self.table.setColumnWidth(7, 100)
+        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(6, 110)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().hide()
         self.table.setShowGrid(False)
         self.table.setFrameShape(QFrame.Shape.NoFrame)
+        self.table.cellClicked.connect(self._on_row_click)
         tl.addWidget(self.table)
-        layout.addWidget(table_frame)
+
+        self.table_frame.hide()
+        layout.addWidget(self.table_frame)
 
         self.count_label = QLabel()
         self.count_label.setStyleSheet(f"color: {C_TEXT_MED}; font-size: 12px;")
+        self.count_label.hide()
         layout.addWidget(self.count_label)
+
+    def _toggle_bills(self):
+        visible = self.table_frame.isVisible()
+        self.table_frame.setVisible(not visible)
+        self.count_label.setVisible(not visible)
+        self._toggle_btn.setText("إخفاء الفواتير" if not visible else "📋  عرض الفواتير")
 
     def load_sales(self):
         sales = db.get_all_sales()
         type_map = {'cash': 'نقدي', 'credit': 'آجل', 'partial': 'جزئي'}
+        self._row_ids = [s['id'] for s in sales]
+        self._sales_data = {s['id']: s for s in sales}
         self.table.setRowCount(len(sales))
 
         for row, s in enumerate(sales):
@@ -532,21 +662,21 @@ class SalesPage(QWidget):
             id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             id_item.setFont(QFont("Tahoma", 11, QFont.Weight.Bold))
             id_item.setForeground(QColor(C_PRIMARY))
-            self.table.setItem(row, 7, id_item)
+            self.table.setItem(row, 6, id_item)
 
             date_item = QTableWidgetItem(s['date'])
             date_item.setForeground(QColor(C_TEXT_MED))
-            self.table.setItem(row, 6, date_item)
+            self.table.setItem(row, 5, date_item)
 
             name_item = QTableWidgetItem(s['customer_name'])
             name_item.setFont(QFont("Tahoma", 11, QFont.Weight.Bold))
             name_item.setForeground(QColor(C_TEXT_DARK))
-            self.table.setItem(row, 5, name_item)
+            self.table.setItem(row, 4, name_item)
 
             for col, val, clr in [
-                (4, f"{s['total_amount']:.2f}", C_TEXT_DARK),
-                (3, f"{s['paid_amount']:.2f}",  C_PRIMARY),
-                (2, f"{s['remaining']:.2f}",    C_DANGER if s['remaining'] > 0 else C_PRIMARY),
+                (3, f"{s['total_amount']:.2f}", C_TEXT_DARK),
+                (2, f"{s['paid_amount']:.2f}",  C_PRIMARY),
+                (1, f"{s['remaining']:.2f}",    C_DANGER if s['remaining'] > 0 else C_PRIMARY),
             ]:
                 it = QTableWidgetItem(val)
                 it.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -556,22 +686,18 @@ class SalesPage(QWidget):
             type_item = QTableWidgetItem(type_map.get(s['payment_type'], ''))
             type_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             type_item.setForeground(QColor(C_TEXT_MED))
-            self.table.setItem(row, 1, type_item)
+            self.table.setItem(row, 0, type_item)
 
-            det_btn = QPushButton("التفاصيل")
-            det_btn.setStyleSheet(BTN_EDIT)
-            det_btn.clicked.connect(lambda _, sid=s['id']: self._show_details(sid))
-            btn_w = QWidget()
-            bl = QHBoxLayout(btn_w)
-            bl.setContentsMargins(5, 4, 5, 4)
-            bl.addWidget(det_btn)
-            self.table.setCellWidget(row, 0, btn_w)
-            self.table.setRowHeight(row, 50)
+            self.table.setRowHeight(row, 44)
 
         total_amount = sum(s['total_amount'] for s in sales)
         self.count_label.setText(
             f"عدد الفواتير: {len(sales)}   |   إجمالي المبيعات: {total_amount:.2f} ج.م"
         )
+
+    def _on_row_click(self, row, _col):
+        if 0 <= row < len(self._row_ids):
+            self._show_details(self._row_ids[row])
 
     def _new_sale(self):
         dlg = NewSaleDialog(self)
@@ -579,8 +705,9 @@ class SalesPage(QWidget):
             self.load_sales()
 
     def _show_details(self, sale_id):
+        sale = self._sales_data.get(sale_id)
+        if not sale:
+            return
         items = db.get_sale_items(sale_id)
-        msg = f"تفاصيل الفاتورة رقم {sale_id}:\n\n"
-        for item in items:
-            msg += f"•  {item['product_name']}   ×{item['quantity']:.2f}   @{item['unit_price']:.2f} ج.م  =  {item['total']:.2f} ج.م\n"
-        show_info(self, "تفاصيل الفاتورة", msg)
+        dlg = SaleDetailDialog(sale, items, self)
+        dlg.exec()

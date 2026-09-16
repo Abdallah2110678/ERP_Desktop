@@ -10,11 +10,12 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QColor
 import database as db
-from ui.styles import card_shadow, C_DANGER, C_TEXT_DARK, C_TEXT_MED, TABLE_STYLE
+from ui.styles import card_shadow, C_DANGER, C_TEXT_DARK, C_TEXT_MED, C_ORANGE, TABLE_STYLE
 
 LOW_THRESHOLD   = 30   # warning
 CRIT_THRESHOLD  = 10   # critical
 EXPIRY_DAYS     = 90   # warn when expiry is within this many days
+DUE_DAYS        = 7    # warn when payment due within this many days
 
 
 class LowStockDialog(QDialog):
@@ -262,6 +263,108 @@ class ExpiryDialog(QDialog):
         layout.addLayout(bl)
 
 
+class DuePaymentsDialog(QDialog):
+    """Dialog listing supplier invoices that are overdue or due within DUE_DAYS days."""
+
+    def __init__(self, parent, invoices):
+        super().__init__(parent)
+        self.invoices = invoices
+        self.setWindowTitle("الفواتير المستحقة والقادمة")
+        self.resize(780, 440)
+        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        self.setStyleSheet("""
+            QDialog { background: #f4f7fa; font-family: Tahoma; }
+            QLabel  { font-family: Tahoma; background: transparent; }
+        """ + TABLE_STYLE)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(14)
+
+        today_str = date.today().strftime('%Y-%m-%d')
+        overdue_count = sum(1 for p in self.invoices if (p.get('payment_due_date') or '') < today_str)
+        soon_count = len(self.invoices) - overdue_count
+
+        hdr = QFrame()
+        hdr.setStyleSheet("QFrame { background: #922b21; border-radius: 10px; border: none; }")
+        hl = QHBoxLayout(hdr)
+        hl.setContentsMargins(18, 14, 18, 14)
+        title = QLabel("💳  الفواتير المستحقة والقادمة")
+        title.setFont(QFont("Tahoma", 14, QFont.Weight.Bold))
+        title.setStyleSheet("color: white;")
+        hl.addWidget(title)
+        hl.addStretch()
+        if overdue_count:
+            lbl = QLabel(f"🔴  متأخر: {overdue_count}")
+            lbl.setStyleSheet("color: #ff8080; font-size: 12px; font-weight: bold;")
+            hl.addWidget(lbl)
+        if soon_count:
+            lbl = QLabel(f"  🟠  خلال {DUE_DAYS} أيام: {soon_count}")
+            lbl.setStyleSheet("color: #ffd080; font-size: 12px;")
+            hl.addWidget(lbl)
+        layout.addWidget(hdr)
+
+        table = QTableWidget()
+        table.setColumnCount(5)
+        table.setHorizontalHeaderLabels(["الحالة", "تاريخ السداد", "المتبقي (ج.م)", "المورد", "رقم الفاتورة"])
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        table.setColumnWidth(0, 140)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        table.verticalHeader().hide()
+        table.setAlternatingRowColors(True)
+        table.setShowGrid(False)
+        table.setFrameShape(QFrame.Shape.NoFrame)
+        table.setRowCount(len(self.invoices))
+        layout.addWidget(table)
+
+        for row, p in enumerate(self.invoices):
+            due = p.get('payment_due_date') or ''
+            remaining = max(0.0, (p.get('total_amount') or 0) - (p.get('paid_amount') or 0))
+            supplier = p.get('supplier_display') or p.get('supplier') or '—'
+            is_overdue = due < today_str
+
+            if is_overdue:
+                days_late = (date.today() - date.fromisoformat(due)).days
+                status = f"🔴  متأخر {days_late} يوم"
+                clr = C_DANGER
+            else:
+                days_left = (date.fromisoformat(due) - date.today()).days
+                status = "🟠  اليوم" if days_left == 0 else f"🟠  بعد {days_left} يوم"
+                clr = C_ORANGE
+
+            def _cell(text, color, align=True, bold=False):
+                it = QTableWidgetItem(str(text))
+                it.setForeground(QColor(color))
+                if align:
+                    it.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                if bold:
+                    it.setFont(QFont("Tahoma", 11, QFont.Weight.Bold))
+                return it
+
+            table.setItem(row, 0, _cell(status, clr, bold=True))
+            table.setItem(row, 1, _cell(due, clr))
+            table.setItem(row, 2, _cell(f"{remaining:.2f}", clr, bold=True))
+            table.setItem(row, 3, _cell(supplier, C_TEXT_DARK, align=False))
+            table.setItem(row, 4, _cell(f"#{p['id']}", C_TEXT_MED))
+            table.setRowHeight(row, 44)
+
+        close_btn = QPushButton("إغلاق")
+        close_btn.setStyleSheet("""
+            QPushButton { background: #6c757d; color: white; border: none;
+                padding: 10px 20px; border-radius: 7px; font-size: 13px; font-family: Tahoma; }
+            QPushButton:hover { background: #5a6268; }
+        """)
+        close_btn.clicked.connect(self.accept)
+        bl = QHBoxLayout()
+        bl.addStretch()
+        bl.addWidget(close_btn)
+        layout.addLayout(bl)
+
+
 def _make_inner_bar(parent, msg_attr, open_fn):
     """Helper: create one horizontal notification strip. Returns (QFrame, msg_label)."""
     bar = QFrame(parent)
@@ -317,20 +420,24 @@ class NotificationBar(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._products  = []
-        self._expiring  = []
+        self._products      = []
+        self._expiring      = []
+        self._due_invoices  = []
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        self._stock_bar, self._stock_msg = _make_inner_bar(self, '_stock_msg', self._open_stock_dialog)
+        self._stock_bar,  self._stock_msg  = _make_inner_bar(self, '_stock_msg',  self._open_stock_dialog)
         self._expiry_bar, self._expiry_msg = _make_inner_bar(self, '_expiry_msg', self._open_expiry_dialog)
+        self._due_bar,    self._due_msg    = _make_inner_bar(self, '_due_msg',    self._open_due_dialog)
 
         layout.addWidget(self._stock_bar)
         layout.addWidget(self._expiry_bar)
+        layout.addWidget(self._due_bar)
 
         self._stock_bar.hide()
         self._expiry_bar.hide()
+        self._due_bar.hide()
         self.hide()
 
         self.refresh()
@@ -387,10 +494,42 @@ class NotificationBar(QWidget):
         else:
             self._expiry_bar.hide()
 
-        self.setVisible(bool(self._products or self._expiring))
+        # ── Due / overdue payments ────────────────────────────────────────────
+        self._due_invoices = db.get_upcoming_due_payments(days_ahead=DUE_DAYS)
+        today_str = date.today().strftime('%Y-%m-%d')
+        overdue_count = sum(1 for p in self._due_invoices if (p.get('payment_due_date') or '') < today_str)
+        soon_count = len(self._due_invoices) - overdue_count
+
+        if self._due_invoices:
+            parts = []
+            if overdue_count:
+                parts.append(f"{overdue_count} فاتورة متأخرة السداد")
+            if soon_count:
+                parts.append(f"{soon_count} فاتورة تستحق خلال {DUE_DAYS} أيام")
+            self._due_msg.setText("💳   " + "  |  ".join(parts))
+            if overdue_count:
+                self._due_bar.setStyleSheet("""
+                    QFrame { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+                        stop:0 #922b21, stop:1 #e74c3c); border-bottom: 1px solid #7b241c; }
+                    QLabel { color: white; background: transparent; font-family: Tahoma; }
+                """)
+            else:
+                self._due_bar.setStyleSheet("""
+                    QFrame { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+                        stop:0 #b7770d, stop:1 #e67e22); border-bottom: 1px solid #9c6508; }
+                    QLabel { color: white; background: transparent; font-family: Tahoma; }
+                """)
+            self._due_bar.show()
+        else:
+            self._due_bar.hide()
+
+        self.setVisible(bool(self._products or self._expiring or self._due_invoices))
 
     def _open_stock_dialog(self):
         LowStockDialog(self.window(), self._products).exec()
 
     def _open_expiry_dialog(self):
         ExpiryDialog(self.window(), self._expiring).exec()
+
+    def _open_due_dialog(self):
+        DuePaymentsDialog(self.window(), self._due_invoices).exec()

@@ -8,7 +8,7 @@ from PyQt6.QtGui import QColor, QFont
 import database as db
 from ui.styles import (
     TABLE_STYLE, BTN_ADD,
-    PAGE_STYLE, INPUT_STYLE, card_shadow, style_calendar,
+    PAGE_STYLE, INPUT_STYLE, card_shadow, style_calendar, setup_searchable_combo,
     C_TEXT_DARK, C_TEXT_MED, C_PRIMARY, C_DANGER, C_ORANGE,
 )
 from ui.products import page_header
@@ -56,6 +56,8 @@ class SupplierAccountPage(QWidget):
         self.supplier_combo = QComboBox()
         self.supplier_combo.setMinimumWidth(200)
         self.supplier_combo.setStyleSheet(INPUT_STYLE)
+        setup_searchable_combo(self.supplier_combo)
+        self.supplier_combo.lineEdit().setPlaceholderText("ابحث باسم المورد...")
 
         date_from_lbl = QLabel("من:")
         date_from_lbl.setFixedWidth(30)
@@ -156,8 +158,8 @@ class SupplierAccountPage(QWidget):
 
             t = QTableWidget()
             if is_purchase:
-                t.setColumnCount(5)
-                t.setHorizontalHeaderLabels(["التاريخ", "الإجمالي (ج.م)", "المدفوع (ج.م)", "نوع الدفع", "الأصناف"])
+                t.setColumnCount(6)
+                t.setHorizontalHeaderLabels(["التاريخ", "الإجمالي (ج.م)", "المدفوع (ج.م)", "نوع الدفع", "تاريخ السداد", "الأصناف"])
             else:
                 t.setColumnCount(4)
                 t.setHorizontalHeaderLabels(["التاريخ", "الإجمالي (ج.م)", "المدفوع (ج.م)", "نوع الدفع"])
@@ -265,6 +267,9 @@ class SupplierAccountPage(QWidget):
             return it
 
         def fill_purchases_table(table, attr, items):
+            from datetime import date as _date, timedelta as _td
+            today_str = _date.today().isoformat()
+            soon_str = (_date.today() + _td(days=2)).isoformat()
             table.setRowCount(len(items))
             getattr(self, attr + '_count').setText(f"{len(items)} سجل")
             for row, p in enumerate(items):
@@ -272,8 +277,20 @@ class SupplierAccountPage(QWidget):
                 table.setItem(row, 1, _cell(f"{p['total_amount']:.2f}", C_TEAL, bold=True))
                 table.setItem(row, 2, _cell(f"{p.get('paid_amount', 0):.2f}", C_PRIMARY))
                 table.setItem(row, 3, _cell(pay_map.get(p.get('payment_type', 'cash'), ''), C_TEXT_MED))
+                due = p.get('payment_due_date')
+                remaining = max(0.0, (p.get('total_amount') or 0) - (p.get('paid_amount') or 0))
+                if due and remaining > 0:
+                    if due < today_str:
+                        due_color, due_text = C_DANGER, f"متأخر: {due}"
+                    elif due <= soon_str:
+                        due_color, due_text = C_ORANGE, f"قريب: {due}"
+                    else:
+                        due_color, due_text = C_TEXT_MED, due
+                else:
+                    due_color, due_text = C_TEXT_MED, "—"
+                table.setItem(row, 4, _cell(due_text, due_color, bold=(due and remaining > 0 and due <= soon_str)))
                 summary = p.get('items_summary', '') or ''
-                table.setItem(row, 4, _cell(summary, C_TEXT_MED, align=False))
+                table.setItem(row, 5, _cell(summary, C_TEXT_MED, align=False))
                 table.setRowHeight(row, 36)
 
         def fill_returns_table(table, attr, items):

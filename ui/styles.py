@@ -1,6 +1,7 @@
 from PyQt6.QtWidgets import (
     QGraphicsDropShadowEffect, QMessageBox, QMenu, QSpinBox,
     QToolButton, QAbstractItemView, QCalendarWidget,
+    QCompleter, QComboBox,
 )
 from PyQt6.QtGui import QColor, QPalette, QTextCharFormat
 from PyQt6.QtCore import Qt, QObject, QEvent, QDate, QLocale
@@ -185,6 +186,21 @@ QDoubleSpinBox::up-button, QDoubleSpinBox::down-button,
 QSpinBox::up-button, QSpinBox::down-button {{
     width: 22px; border: none; background: #f0f3f7; border-radius: 3px;
 }}
+QComboBox QAbstractItemView {{
+    background: {C_WHITE};
+    color: {C_TEXT_DARK};
+    border: 1px solid {C_CARD_BORDER};
+    border-radius: 6px;
+    selection-background-color: {C_PRIMARY};
+    selection-color: white;
+    font-family: Tahoma;
+    font-size: 13px;
+    outline: none;
+}}
+QComboBox QAbstractItemView::item {{
+    padding: 6px 12px;
+    min-height: 28px;
+}}
 """
 
 # ── Dialog ────────────────────────────────────────────────────────────────────────
@@ -303,7 +319,7 @@ class _NavFilter(QObject):
         pos    = self._month_btn.mapToGlobal(self._month_btn.rect().bottomLeft())
         chosen = menu.exec(pos)
         if chosen and chosen in actions:
-            self._cal.setCurrentPage(self._cal.currentPageYear(), actions[chosen])
+            self._cal.setCurrentPage(self._cal.yearShown(), actions[chosen])
         return True
 
 
@@ -527,6 +543,19 @@ def confirm_delete(parent, message="هل أنت متأكد من الحذف؟"):
     dlg.setDefaultButton(no_btn)
     dlg.exec()
     return dlg.clickedButton() is yes_btn
+
+
+# ── Searchable combo helper ───────────────────────────────────────────────────────
+def setup_searchable_combo(combo: QComboBox):
+    """Attach a type-to-search completer (substring, case-insensitive) to a QComboBox."""
+    if not combo.isEditable():
+        combo.setEditable(True)
+    combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+    completer = QCompleter(combo.model(), combo)
+    completer.setFilterMode(Qt.MatchFlag.MatchContains)
+    completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+    completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+    combo.setCompleter(completer)
 
 
 # ── Page ─────────────────────────────────────────────────────────────────────────
