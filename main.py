@@ -1,11 +1,17 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox, QDoubleSpinBox, QSpinBox
+from PyQt6.QtCore import Qt, QObject, QEvent, QTimer
 from PyQt6.QtGui import QFont
-from ui.main_window import MainWindow
-from ui.login import LoginDialog
-from ui.app_icon import get_app_icon
 import database as db
+# UI modules are imported inside main() AFTER init_scale() so they get scaled styles
+
+
+class _SpinBoxSelectAll(QObject):
+    """Select all text whenever any spin box gains focus — no more triple-clicking."""
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.FocusIn and isinstance(obj, (QDoubleSpinBox, QSpinBox)):
+            QTimer.singleShot(0, obj.selectAll)
+        return False
 
 
 MSGBOX_STYLE = """
@@ -71,10 +77,24 @@ def _show_overdue_alert(window):
 
 def main():
     app = QApplication(sys.argv)
-    app.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-    app.setFont(QFont("Tahoma", 11))
     app.setStyle("Fusion")
+
+    # Scale UI based on primary screen height BEFORE importing any UI modules
+    import ui.styles as styles
+    screen_h = app.primaryScreen().geometry().height()
+    styles.init_scale(screen_h)
+
+    # Now import UI modules (they pick up the scaled style constants)
+    from ui.main_window import MainWindow
+    from ui.login import LoginDialog
+    from ui.app_icon import get_app_icon
+
+    app.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+    app.setFont(QFont("Tahoma", styles.px(11)))
     app.setStyleSheet(MSGBOX_STYLE)
+
+    _spin_filter = _SpinBoxSelectAll(app)
+    app.installEventFilter(_spin_filter)
 
     icon = get_app_icon()
     app.setWindowIcon(icon)

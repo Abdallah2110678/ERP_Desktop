@@ -606,21 +606,23 @@ def generate_inventory_report(products: list) -> str:
                 f"تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d')}")
     y = _draw_page_header(c, "تقرير المخزون الكامل", subtitle)
 
-    low_count  = sum(1 for p in products if CRIT < p['quantity'] <= LOW)
-    crit_count = sum(1 for p in products if p['quantity'] <= CRIT)
-    total_val  = sum(p['quantity'] * p['purchase_price'] for p in products)
+    low_count       = sum(1 for p in products if CRIT < p['quantity'] <= LOW)
+    crit_count      = sum(1 for p in products if p['quantity'] <= CRIT)
+    total_val       = sum(p['quantity'] * p['purchase_price'] for p in products)
+    total_sell_val  = sum(p['quantity'] * p['selling_price']  for p in products)
 
     # fetch nearest expiry per product
     expiry_map = db.get_product_nearest_expiries()
     today_str  = _dt.today().strftime('%Y-%m-%d')
 
-    box_h = 50
+    box_h = 68
     c.setFillColor(LIGHT_GRAY);  c.setStrokeColor(DARK_GRAY);  c.setLineWidth(0.6)
     c.rect(ML, y - box_h, TW, box_h, fill=1, stroke=1)
     c.setFillColor(BLACK)
-    _rtext(c, f"اجمالي قيمة المخزون (بسعر الشراء):  {total_val:.2f} ج.م",       MR - 8, y - 14, "ArBold", 11)
-    _rtext(c, f"(!)  منتجات حرجة (اقل من {CRIT} وحدات):  {crit_count}",          MR - 8, y - 30, "ArBold", 10)
-    _rtext(c, f"(v)  منتجات منخفضة ({CRIT} الى {LOW} وحدات):  {low_count}",      MR - 8, y - 46, "Ar",     10)
+    _rtext(c, f"اجمالي قيمة المخزون (بسعر الشراء):  {total_val:.2f} ج.م",          MR - 8, y - 14, "ArBold", 11)
+    _rtext(c, f"اجمالي قيمة المخزون (بسعر البيع):    {total_sell_val:.2f} ج.م",    MR - 8, y - 30, "ArBold", 11)
+    _rtext(c, f"(!)  منتجات حرجة (اقل من {CRIT} وحدات):  {crit_count}",             MR - 8, y - 46, "ArBold", 10)
+    _rtext(c, f"(v)  منتجات منخفضة ({CRIT} الى {LOW} وحدات):  {low_count}",         MR - 8, y - 62, "Ar",     10)
     y -= box_h + 16
 
     # Columns L→R: سعر البيع | سعر الشراء | الكمية | الوحدة | أقرب تاريخ انتهاء | اسم الدواء

@@ -221,6 +221,7 @@ class NewSaleReturnDialog(QDialog):
             self.unit_input.setText(p['unit'])
             self.price_spin.setValue(p['selling_price'])
             self.stock_label.setText(f"المتاح: {p['quantity']:.2f} {p['unit']}")
+            self.inv_type_combo.setCurrentText(p.get('product_type') or 'بيطري')
 
     def _add_item(self):
         idx = self.product_combo.currentIndex()

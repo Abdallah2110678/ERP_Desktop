@@ -346,6 +346,7 @@ class NewPurchaseDialog(QDialog):
                 self.unit_input.setText(p['unit'])
                 self.price_spin.setValue(p['purchase_price'])
                 self.selling_price_spin.setValue(p['selling_price'])
+                self.inv_type_combo.setCurrentText(p.get('product_type') or 'بيطري')
 
     def _add_item(self):
         idx           = self.product_combo.currentIndex()
@@ -438,6 +439,8 @@ class NewPurchaseDialog(QDialog):
             show_warning(self, "خطأ", "يرجى إضافة صنف واحد على الأقل")
             return
 
+        inv_type = self.inv_type_combo.currentText()
+
         # Create any new products that were typed in and don't exist yet
         for item in self.cart:
             if item.get('is_new') and item['product_id'] is None:
@@ -447,6 +450,7 @@ class NewPurchaseDialog(QDialog):
                     0,
                     item['unit_price'],
                     item['selling_price'],
+                    inv_type,
                 )
                 item['product_id'] = new_id
                 item['is_new']     = False
@@ -479,7 +483,6 @@ class NewPurchaseDialog(QDialog):
             supplier_name = typed
             supplier_id   = db.add_supplier(typed, '', '')
 
-        inv_type = self.inv_type_combo.currentText()
         purchase_id = db.create_purchase(supplier_id, supplier_name, self.cart, total, paid_amount, pay_type, notes, inv_type, payment_due_date)
         show_info(self, "تم بنجاح",
             f"✓  تم تسجيل فاتورة الشراء بنجاح\n"
@@ -613,32 +616,117 @@ class PurchasesPage(QWidget):
         self._setup_ui()
         self.load_purchases()
 
+    def _stat_card(self, parent_layout, title, bg, value_color, icon):
+        frame = QFrame()
+        frame.setStyleSheet(f"""
+            QFrame {{
+                background: {bg};
+                border-radius: 12px;
+                border: 1px solid #dce3ec;
+            }}
+        """)
+        card_shadow(frame, blur=10, y=3, alpha=14)
+        fl = QVBoxLayout(frame)
+        fl.setContentsMargins(18, 14, 18, 14)
+        fl.setSpacing(6)
+        hrow = QHBoxLayout()
+        hrow.setSpacing(6)
+        icon_lbl = QLabel(icon)
+        icon_lbl.setStyleSheet("font-size: 18px; background: transparent; border: none;")
+        title_lbl = QLabel(title)
+        title_lbl.setStyleSheet(
+            f"color: {C_TEXT_MED}; font-size: 12px; font-family: Tahoma;"
+            " background: transparent; border: none;"
+        )
+        hrow.addWidget(icon_lbl)
+        hrow.addWidget(title_lbl)
+        hrow.addStretch()
+        fl.addLayout(hrow)
+        val_lbl = QLabel("—")
+        val_lbl.setFont(QFont("Tahoma", 15, QFont.Weight.Bold))
+        val_lbl.setStyleSheet(f"color: {value_color}; background: transparent; border: none;")
+        fl.addWidget(val_lbl)
+        parent_layout.addWidget(frame, 1)
+        return val_lbl
+
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(28, 28, 28, 28)
         layout.setSpacing(16)
 
-        header_frame, header_inner = page_header(
-            "📦  سجل المشتريات",
-            "سجّل مشترياتك من الموردين وتحديث المخزون يتم تلقائياً"
-        )
+        # ── Header card ────────────────────────────────────────────────────────
+        header = QFrame()
+        header.setStyleSheet(f"""
+            QFrame {{
+                background: white;
+                border-radius: 12px;
+                border: 1px solid #dce3ec;
+                border-top: 4px solid {C_ORANGE};
+            }}
+        """)
+        card_shadow(header, blur=15, y=3, alpha=18)
+        h_inner = QHBoxLayout(header)
+        h_inner.setContentsMargins(20, 16, 20, 16)
+        h_inner.setSpacing(14)
+
+        text_col = QVBoxLayout()
+        text_col.setSpacing(3)
+        title_lbl = QLabel("📦  المشتريات")
+        title_lbl.setFont(QFont("Tahoma", 17, QFont.Weight.Bold))
+        title_lbl.setStyleSheet(f"color: {C_TEXT_DARK}; background: transparent;")
+        sub_lbl = QLabel("سجّل مشترياتك من الموردين — يتم تحديث المخزون تلقائياً")
+        sub_lbl.setStyleSheet(f"color: {C_TEXT_MED}; font-size: 11px; background: transparent;")
+        text_col.addWidget(title_lbl)
+        text_col.addWidget(sub_lbl)
+        h_inner.addLayout(text_col)
+        h_inner.addStretch()
+
         new_btn = QPushButton("＋  تسجيل شراء جديد")
         new_btn.setStyleSheet(BTN_ORANGE)
         new_btn.clicked.connect(self._new_purchase)
-        header_inner.addWidget(new_btn)
+        h_inner.addWidget(new_btn)
 
-        self._toggle_btn = QPushButton("📋  عرض الفواتير")
-        self._toggle_btn.setStyleSheet(BTN_SECONDARY)
-        self._toggle_btn.clicked.connect(self._toggle_bills)
-        header_inner.addWidget(self._toggle_btn)
+        layout.addWidget(header)
 
-        layout.addWidget(header_frame)
+        # ── Stats cards ────────────────────────────────────────────────────────
+        stats_row = QHBoxLayout()
+        stats_row.setSpacing(14)
+        self._lbl_count = self._stat_card(stats_row, "عدد الفواتير",     "#f4f7fa", C_TEXT_DARK, "📋")
+        self._lbl_total = self._stat_card(stats_row, "إجمالي المشتريات", "#fff8f0", C_ORANGE,    "🛒")
+        self._lbl_paid  = self._stat_card(stats_row, "إجمالي المدفوع",   "#f0fff4", "#27ae60",   "✅")
+        self._lbl_debt  = self._stat_card(stats_row, "المتبقي / الديون", "#fff5f5", C_DANGER,    "⚠️")
+        layout.addLayout(stats_row)
 
+        # ── Table card with built-in search bar ────────────────────────────────
         self.table_frame = QFrame()
-        self.table_frame.setStyleSheet("QFrame { background:white; border-radius:12px; border:1px solid #dce3ec; }")
+        self.table_frame.setStyleSheet(
+            "QFrame { background: white; border-radius: 12px; border: 1px solid #dce3ec; }"
+        )
         card_shadow(self.table_frame)
         tl = QVBoxLayout(self.table_frame)
         tl.setContentsMargins(0, 0, 0, 0)
+        tl.setSpacing(0)
+
+        search_bar = QFrame()
+        search_bar.setStyleSheet(
+            "QFrame { background: #f8fafc; border: none;"
+            " border-bottom: 1px solid #dce3ec; border-radius: 0; }"
+        )
+        sb = QHBoxLayout(search_bar)
+        sb.setContentsMargins(16, 10, 16, 10)
+        sb.setSpacing(10)
+        tbl_title = QLabel("الفواتير")
+        tbl_title.setFont(QFont("Tahoma", 12, QFont.Weight.Bold))
+        tbl_title.setStyleSheet(f"color: {C_TEXT_DARK}; background: transparent;")
+        self._search_box = QLineEdit()
+        self._search_box.setPlaceholderText("🔍  بحث باسم المورد أو رقم الفاتورة...")
+        self._search_box.setStyleSheet(INPUT_STYLE)
+        self._search_box.setMaximumWidth(320)
+        self._search_box.textChanged.connect(self._filter_table)
+        sb.addWidget(tbl_title)
+        sb.addStretch()
+        sb.addWidget(self._search_box)
+        tl.addWidget(search_bar)
 
         self.table = QTableWidget()
         self.table.setColumnCount(6)
@@ -657,29 +745,30 @@ class PurchasesPage(QWidget):
         self.table.cellClicked.connect(self._on_row_click)
         tl.addWidget(self.table)
 
-        self.table_frame.hide()
         layout.addWidget(self.table_frame)
 
-        self.count_label = QLabel()
-        self.count_label.setStyleSheet(f"color: {C_TEXT_MED}; font-size: 12px;")
-        self.count_label.hide()
-        layout.addWidget(self.count_label)
-
-    def _toggle_bills(self):
-        visible = self.table_frame.isVisible()
-        self.table_frame.setVisible(not visible)
-        self.count_label.setVisible(not visible)
-        self._toggle_btn.setText("إخفاء الفواتير" if not visible else "📋  عرض الفواتير")
+    def _filter_table(self, query):
+        q = query.strip().lower()
+        for row in range(self.table.rowCount()):
+            sup_item = self.table.item(row, 2)
+            id_item  = self.table.item(row, 5)
+            sup = sup_item.text().lower() if sup_item else ""
+            inv = id_item.text().lower() if id_item else ""
+            self.table.setRowHidden(row, bool(q) and q not in sup and q not in inv)
 
     def load_purchases(self):
         from datetime import date as _date, timedelta as _td
         today_str = _date.today().isoformat()
-        soon_str = (_date.today() + _td(days=2)).isoformat()
+        soon_str  = (_date.today() + _td(days=2)).isoformat()
 
         purchases = db.get_all_purchases()
         self._row_ids = [p['id'] for p in purchases]
         self._purchases_data = {p['id']: p for p in purchases}
         self.table.setRowCount(len(purchases))
+
+        total_amount = 0.0
+        total_paid   = 0.0
+        total_debt   = 0.0
 
         for row, p in enumerate(purchases):
             id_item = QTableWidgetItem(f"# {p['id']}")
@@ -724,13 +813,16 @@ class PurchasesPage(QWidget):
             if due and remaining > 0 and due <= soon_str:
                 due_item.setFont(QFont("Tahoma", 11, QFont.Weight.Bold))
             self.table.setItem(row, 4, due_item)
-
             self.table.setRowHeight(row, 44)
 
-        total_amount = sum(p['total_amount'] for p in purchases)
-        self.count_label.setText(
-            f"عدد الفواتير: {len(purchases)}   |   إجمالي المشتريات: {total_amount:.2f} ج.م"
-        )
+            total_amount += p['total_amount']
+            total_paid   += (p.get('paid_amount') or 0)
+            total_debt   += remaining
+
+        self._lbl_count.setText(str(len(purchases)))
+        self._lbl_total.setText(f"{total_amount:,.2f} ج.م")
+        self._lbl_paid.setText(f"{total_paid:,.2f} ج.م")
+        self._lbl_debt.setText(f"{total_debt:,.2f} ج.م")
 
     def _on_row_click(self, row, _col):
         if 0 <= row < len(self._row_ids):

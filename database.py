@@ -382,6 +382,19 @@ def delete_payment(payment_id):
     conn.close()
 
 
+def update_payment(payment_id, amount, notes, date):
+    conn = get_connection()
+    old = conn.execute("SELECT customer_id, amount FROM payments WHERE id=?", (payment_id,)).fetchone()
+    if old:
+        debt_delta = old['amount'] - amount  # undo old, apply new
+        conn.execute("UPDATE payments SET amount=?, notes=?, date=? WHERE id=?",
+                     (amount, notes, date, payment_id))
+        conn.execute("UPDATE customers SET total_debt = MAX(0, total_debt + ?) WHERE id=?",
+                     (debt_delta, old['customer_id']))
+    conn.commit()
+    conn.close()
+
+
 # ===== Batch / FIFO helpers =====
 
 def _consume_batches(cursor, product_id, qty_to_consume):
@@ -623,6 +636,19 @@ def delete_supplier_payment(payment_id):
     conn.close()
 
 
+def update_supplier_payment(payment_id, amount, notes, date):
+    conn = get_connection()
+    old = conn.execute("SELECT supplier_id, amount FROM supplier_payments WHERE id=?", (payment_id,)).fetchone()
+    if old:
+        debt_delta = old['amount'] - amount
+        conn.execute("UPDATE supplier_payments SET amount=?, notes=?, date=? WHERE id=?",
+                     (amount, notes, date, payment_id))
+        conn.execute("UPDATE suppliers SET total_debt = MAX(0, total_debt + ?) WHERE id=?",
+                     (debt_delta, old['supplier_id']))
+    conn.commit()
+    conn.close()
+
+
 # ===== Purchases =====
 
 def create_sale_return(customer_id, customer_name, items, total_amount, invoice_type, notes, date=None):
@@ -826,8 +852,8 @@ def create_purchase(supplier_id, supplier_name, items, total_amount, paid_amount
              item['quantity'], item.get('unit_name', ''), item['unit_price'], item['total'])
         )
         cursor.execute(
-            "UPDATE products SET quantity = quantity + ?, purchase_price = ?, selling_price = ? WHERE id=?",
-            (item['quantity'], item['unit_price'], item['selling_price'], item['product_id'])
+            "UPDATE products SET quantity = quantity + ?, purchase_price = ?, selling_price = ?, product_type = ? WHERE id=?",
+            (item['quantity'], item['unit_price'], item['selling_price'], invoice_type, item['product_id'])
         )
         if item.get('product_id'):
             cursor.execute(

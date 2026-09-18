@@ -243,6 +243,11 @@ class ProductsPage(QWidget):
             "💊  إدارة الأدوية والمنتجات",
             "أضف وعدّل أدوية المخزون مع أسعار الشراء والبيع"
         )
+        add_btn = QPushButton("＋  إضافة دواء جديد")
+        add_btn.setStyleSheet(BTN_ADD)
+        add_btn.clicked.connect(self._add_product)
+        header_inner.addWidget(add_btn)
+
         full_report_btn = QPushButton("🖨  تقرير المخزون الكامل")
         full_report_btn.setStyleSheet("""
             QPushButton { background:#2980b9; color:white; border:none;
@@ -404,7 +409,9 @@ class ProductsPage(QWidget):
         dlg = ProductDialog(self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             d = dlg.get_data()
-            db.add_product(d['name'], d['unit'], d['quantity'], d['purchase_price'], d['selling_price'], d['product_type'])
+            new_id = db.add_product(d['name'], d['unit'], d['quantity'], d['purchase_price'], d['selling_price'], d['product_type'])
+            if d.get('expiry_date') is not None:
+                db.set_product_expiry(new_id, d['expiry_date'], d['quantity'])
             self.load_products()
 
     def _edit_product(self, pid):

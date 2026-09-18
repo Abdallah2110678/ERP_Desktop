@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QLineEdit, QDoubleSpinBox,
-    QHeaderView, QComboBox, QFrame, QDateEdit,
+    QHeaderView, QComboBox, QFrame, QDateEdit, QDialog, QFormLayout,
 )
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QColor, QFont
@@ -195,11 +195,11 @@ class PaymentsPage(QWidget):
         self.table = QTableWidget()
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels([
-            "حذف", "النوع", "القيمة (ج.م)", "التاريخ", "ملاحظات", "العميل / المورد"
+            "الإجراءات", "النوع", "القيمة (ج.م)", "التاريخ", "ملاحظات", "العميل / المورد"
         ])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(0, 65)
+        self.table.setColumnWidth(0, 110)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
@@ -390,18 +390,96 @@ class PaymentsPage(QWidget):
             type_item.setForeground(QColor("#8e44ad" if p['entity_type'] == 'customer' else "#16a085"))
             self.table.setItem(row, 1, type_item)
 
-            del_btn = QPushButton("🗑")
-            del_btn.setStyleSheet(f"background: {C_DANGER}; color: white; border: none; border-radius: 4px; font-size: 14px;")
             pid = p['id']
             ptype = p['entity_type']
+
+            btn_w = QWidget()
+            btn_l = QHBoxLayout(btn_w)
+            btn_l.setContentsMargins(4, 3, 4, 3)
+            btn_l.setSpacing(4)
+
+            edit_btn = QPushButton("✏")
+            edit_btn.setStyleSheet("background: #2980b9; color: white; border: none; border-radius: 4px; font-size: 13px;")
+            edit_btn.clicked.connect(lambda _, i=pid, t=ptype, data=p: self._edit_payment(i, t, data))
+
+            del_btn = QPushButton("🗑")
+            del_btn.setStyleSheet(f"background: {C_DANGER}; color: white; border: none; border-radius: 4px; font-size: 13px;")
             del_btn.clicked.connect(lambda _, i=pid, t=ptype: self._delete_payment(i, t))
-            self.table.setCellWidget(row, 0, del_btn)
+
+            btn_l.addWidget(edit_btn)
+            btn_l.addWidget(del_btn)
+            self.table.setCellWidget(row, 0, btn_w)
             self.table.setRowHeight(row, 44)
 
         total = sum(p['amount'] for p in payments)
         self.count_label.setText(
             f"عدد الدفعات: {len(payments)}   |   إجمالي المدفوعات: {total:.2f} ج.م"
         )
+
+    def _edit_payment(self, pid, ptype, data):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("تعديل الدفعة")
+        dlg.setFixedWidth(380)
+        dlg.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        dlg.setStyleSheet("""
+            QDialog { background: white; }
+            QLabel { font-family: Tahoma; font-size: 12px; color: #2c3e50; }
+        """)
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
+
+        form = QFormLayout()
+        form.setSpacing(12)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        date_edit = QDateEdit()
+        date_edit.setCalendarPopup(True)
+        date_edit.setDisplayFormat("yyyy-MM-dd")
+        date_edit.setDate(QDate.fromString(data['date'], "yyyy-MM-dd"))
+        date_edit.setStyleSheet(INPUT_STYLE)
+        style_calendar(date_edit)
+        form.addRow("التاريخ:", date_edit)
+
+        amount_spin = QDoubleSpinBox()
+        amount_spin.setRange(0.01, 9999999)
+        amount_spin.setDecimals(2)
+        amount_spin.setSuffix(" ج.م")
+        amount_spin.setValue(data['amount'])
+        amount_spin.setStyleSheet(INPUT_STYLE)
+        form.addRow("المبلغ:", amount_spin)
+
+        notes_input = QLineEdit()
+        notes_input.setText(data.get('notes') or '')
+        notes_input.setStyleSheet(INPUT_STYLE)
+        form.addRow("ملاحظات:", notes_input)
+
+        layout.addLayout(form)
+
+        btn_row = QHBoxLayout()
+        cancel_btn = QPushButton("إلغاء")
+        cancel_btn.setStyleSheet(BTN_SECONDARY)
+        cancel_btn.clicked.connect(dlg.reject)
+        save_btn = QPushButton("حفظ  ✓")
+        save_btn.setStyleSheet(BTN_ADD)
+        save_btn.setDefault(True)
+        save_btn.clicked.connect(dlg.accept)
+        btn_row.addWidget(cancel_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(save_btn)
+        layout.addLayout(btn_row)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            new_date = date_edit.date().toString("yyyy-MM-dd")
+            new_amount = amount_spin.value()
+            new_notes = notes_input.text().strip()
+            if ptype == 'customer':
+                db.update_payment(pid, new_amount, new_notes, new_date)
+            else:
+                db.update_supplier_payment(pid, new_amount, new_notes, new_date)
+            self._load_entities()
+            self.load_payments()
 
     def _delete_payment(self, pid, ptype):
         if confirm_delete(self, "هل أنت متأكد من حذف هذه الدفعة؟"):

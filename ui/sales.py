@@ -12,7 +12,7 @@ from ui.styles import (
     TABLE_STYLE, BTN_ADD, BTN_EDIT, BTN_SECONDARY, BTN_ORANGE,
     DIALOG_STYLE, PAGE_STYLE, INPUT_STYLE, card_shadow, style_calendar,
     show_info, show_warning, show_error, setup_searchable_combo,
-    C_TEXT_DARK, C_TEXT_MED, C_PRIMARY, C_DANGER, C_ORANGE,
+    C_TEXT_DARK, C_TEXT_MED, C_PRIMARY, C_INFO, C_DANGER, C_ORANGE,
 )
 from ui.products import page_header
 
@@ -280,7 +280,7 @@ class NewSaleDialog(QDialog):
 
         # Action buttons
         btn_row = QHBoxLayout()
-        cancel_btn = QPushButton("إلغاء")
+        cancel_btn = QPushButton("إغلاق")
         cancel_btn.setStyleSheet(BTN_SECONDARY)
         cancel_btn.clicked.connect(self.reject)
         confirm_btn = QPushButton("✓  تأكيد الفاتورة")
@@ -326,6 +326,8 @@ class NewSaleDialog(QDialog):
             self.unit_input.setText(p['unit'])
             self.price_spin.setValue(p['selling_price'])
             self.stock_label.setText(f"المتاح: {p['quantity']:.2f} {p['unit']}")
+            ptype = p.get('product_type') or 'بيطري'
+            self.invoice_type.setCurrentText(ptype)
 
     def _select_pay_type(self, idx):
         self._pay_type_idx = idx
@@ -440,6 +442,19 @@ class NewSaleDialog(QDialog):
             "font-size: 14px; font-weight: bold; background: transparent;"
         )
 
+    def _reset_for_next_sale(self):
+        self.cart.clear()
+        self._refresh_cart()
+        self.customer_search.clear()
+        self._load_customers()
+        self.customer_combo.setCurrentIndex(0)
+        self.notes_input.clear()
+        self._load_products()
+        self.total_label.setText("0.00 ج.م")
+        self.remaining_label.setText("0.00 ج.م")
+        self.paid_spin.setValue(0)
+        # payment type and invoice type intentionally kept as-is
+
     def _confirm_sale(self):
         if not self.cart:
             show_warning(self, "خطأ", "يرجى إضافة دواء واحد على الأقل")
@@ -469,7 +484,7 @@ class NewSaleDialog(QDialog):
             f"الإجمالي: {total:.2f} ج.م\n"
             f"المدفوع: {paid:.2f} ج.م\n"
             f"المتبقي: {remaining:.2f} ج.م")
-        self.accept()
+        self._reset_for_next_sale()
 
 
 class SaleDetailDialog(QDialog):
@@ -592,32 +607,117 @@ class SalesPage(QWidget):
         self._setup_ui()
         self.load_sales()
 
+    def _stat_card(self, parent_layout, title, bg, value_color, icon):
+        frame = QFrame()
+        frame.setStyleSheet(f"""
+            QFrame {{
+                background: {bg};
+                border-radius: 12px;
+                border: 1px solid #dce3ec;
+            }}
+        """)
+        card_shadow(frame, blur=10, y=3, alpha=14)
+        fl = QVBoxLayout(frame)
+        fl.setContentsMargins(18, 14, 18, 14)
+        fl.setSpacing(6)
+        hrow = QHBoxLayout()
+        hrow.setSpacing(6)
+        icon_lbl = QLabel(icon)
+        icon_lbl.setStyleSheet("font-size: 18px; background: transparent; border: none;")
+        title_lbl = QLabel(title)
+        title_lbl.setStyleSheet(
+            f"color: {C_TEXT_MED}; font-size: 12px; font-family: Tahoma;"
+            " background: transparent; border: none;"
+        )
+        hrow.addWidget(icon_lbl)
+        hrow.addWidget(title_lbl)
+        hrow.addStretch()
+        fl.addLayout(hrow)
+        val_lbl = QLabel("—")
+        val_lbl.setFont(QFont("Tahoma", 15, QFont.Weight.Bold))
+        val_lbl.setStyleSheet(f"color: {value_color}; background: transparent; border: none;")
+        fl.addWidget(val_lbl)
+        parent_layout.addWidget(frame, 1)
+        return val_lbl
+
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(28, 28, 28, 28)
         layout.setSpacing(16)
 
-        header_frame, header_inner = page_header(
-            "🛒  سجل المبيعات",
-            "جميع فواتير البيع النقدية والآجلة"
-        )
+        # ── Header card ────────────────────────────────────────────────────────
+        header = QFrame()
+        header.setStyleSheet(f"""
+            QFrame {{
+                background: white;
+                border-radius: 12px;
+                border: 1px solid #dce3ec;
+                border-top: 4px solid {C_PRIMARY};
+            }}
+        """)
+        card_shadow(header, blur=15, y=3, alpha=18)
+        h_inner = QHBoxLayout(header)
+        h_inner.setContentsMargins(20, 16, 20, 16)
+        h_inner.setSpacing(14)
+
+        text_col = QVBoxLayout()
+        text_col.setSpacing(3)
+        title_lbl = QLabel("🛒  المبيعات")
+        title_lbl.setFont(QFont("Tahoma", 17, QFont.Weight.Bold))
+        title_lbl.setStyleSheet(f"color: {C_TEXT_DARK}; background: transparent;")
+        sub_lbl = QLabel("جميع فواتير البيع النقدية والآجلة")
+        sub_lbl.setStyleSheet(f"color: {C_TEXT_MED}; font-size: 11px; background: transparent;")
+        text_col.addWidget(title_lbl)
+        text_col.addWidget(sub_lbl)
+        h_inner.addLayout(text_col)
+        h_inner.addStretch()
+
         new_btn = QPushButton("＋  فاتورة بيع جديدة")
         new_btn.setStyleSheet(BTN_ADD)
         new_btn.clicked.connect(self._new_sale)
-        header_inner.addWidget(new_btn)
+        h_inner.addWidget(new_btn)
 
-        self._toggle_btn = QPushButton("📋  عرض الفواتير")
-        self._toggle_btn.setStyleSheet(BTN_SECONDARY)
-        self._toggle_btn.clicked.connect(self._toggle_bills)
-        header_inner.addWidget(self._toggle_btn)
+        layout.addWidget(header)
 
-        layout.addWidget(header_frame)
+        # ── Stats cards ────────────────────────────────────────────────────────
+        stats_row = QHBoxLayout()
+        stats_row.setSpacing(14)
+        self._lbl_count  = self._stat_card(stats_row, "عدد الفواتير",    "#f4f7fa", C_TEXT_DARK, "📋")
+        self._lbl_total  = self._stat_card(stats_row, "إجمالي المبيعات", "#f0fff4", C_PRIMARY,   "🛒")
+        self._lbl_paid   = self._stat_card(stats_row, "المحصّل",          "#f0f7ff", C_INFO,       "💵")
+        self._lbl_credit = self._stat_card(stats_row, "الديون المتبقية", "#fff5f5", C_DANGER,    "⚠️")
+        layout.addLayout(stats_row)
 
+        # ── Table card with built-in search bar ────────────────────────────────
         self.table_frame = QFrame()
-        self.table_frame.setStyleSheet("QFrame { background:white; border-radius:12px; border:1px solid #dce3ec; }")
+        self.table_frame.setStyleSheet(
+            "QFrame { background: white; border-radius: 12px; border: 1px solid #dce3ec; }"
+        )
         card_shadow(self.table_frame)
         tl = QVBoxLayout(self.table_frame)
         tl.setContentsMargins(0, 0, 0, 0)
+        tl.setSpacing(0)
+
+        search_bar = QFrame()
+        search_bar.setStyleSheet(
+            "QFrame { background: #f8fafc; border: none;"
+            " border-bottom: 1px solid #dce3ec; border-radius: 0; }"
+        )
+        sb = QHBoxLayout(search_bar)
+        sb.setContentsMargins(16, 10, 16, 10)
+        sb.setSpacing(10)
+        tbl_title = QLabel("الفواتير")
+        tbl_title.setFont(QFont("Tahoma", 12, QFont.Weight.Bold))
+        tbl_title.setStyleSheet(f"color: {C_TEXT_DARK}; background: transparent;")
+        self._search_box = QLineEdit()
+        self._search_box.setPlaceholderText("🔍  بحث باسم العميل أو رقم الفاتورة...")
+        self._search_box.setStyleSheet(INPUT_STYLE)
+        self._search_box.setMaximumWidth(320)
+        self._search_box.textChanged.connect(self._filter_table)
+        sb.addWidget(tbl_title)
+        sb.addStretch()
+        sb.addWidget(self._search_box)
+        tl.addWidget(search_bar)
 
         self.table = QTableWidget()
         self.table.setColumnCount(7)
@@ -636,19 +736,16 @@ class SalesPage(QWidget):
         self.table.cellClicked.connect(self._on_row_click)
         tl.addWidget(self.table)
 
-        self.table_frame.hide()
         layout.addWidget(self.table_frame)
 
-        self.count_label = QLabel()
-        self.count_label.setStyleSheet(f"color: {C_TEXT_MED}; font-size: 12px;")
-        self.count_label.hide()
-        layout.addWidget(self.count_label)
-
-    def _toggle_bills(self):
-        visible = self.table_frame.isVisible()
-        self.table_frame.setVisible(not visible)
-        self.count_label.setVisible(not visible)
-        self._toggle_btn.setText("إخفاء الفواتير" if not visible else "📋  عرض الفواتير")
+    def _filter_table(self, query):
+        q = query.strip().lower()
+        for row in range(self.table.rowCount()):
+            cust_item = self.table.item(row, 4)
+            id_item   = self.table.item(row, 6)
+            cust = cust_item.text().lower() if cust_item else ""
+            inv  = id_item.text().lower() if id_item else ""
+            self.table.setRowHidden(row, bool(q) and q not in cust and q not in inv)
 
     def load_sales(self):
         sales = db.get_all_sales()
@@ -656,6 +753,10 @@ class SalesPage(QWidget):
         self._row_ids = [s['id'] for s in sales]
         self._sales_data = {s['id']: s for s in sales}
         self.table.setRowCount(len(sales))
+
+        total_amount = 0.0
+        total_paid   = 0.0
+        total_credit = 0.0
 
         for row, s in enumerate(sales):
             id_item = QTableWidgetItem(f"# {s['id']}")
@@ -690,10 +791,14 @@ class SalesPage(QWidget):
 
             self.table.setRowHeight(row, 44)
 
-        total_amount = sum(s['total_amount'] for s in sales)
-        self.count_label.setText(
-            f"عدد الفواتير: {len(sales)}   |   إجمالي المبيعات: {total_amount:.2f} ج.م"
-        )
+            total_amount += s['total_amount']
+            total_paid   += s['paid_amount']
+            total_credit += s['remaining']
+
+        self._lbl_count.setText(str(len(sales)))
+        self._lbl_total.setText(f"{total_amount:,.2f} ج.م")
+        self._lbl_paid.setText(f"{total_paid:,.2f} ج.م")
+        self._lbl_credit.setText(f"{total_credit:,.2f} ج.م")
 
     def _on_row_click(self, row, _col):
         if 0 <= row < len(self._row_ids):
@@ -701,8 +806,8 @@ class SalesPage(QWidget):
 
     def _new_sale(self):
         dlg = NewSaleDialog(self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self.load_sales()
+        dlg.exec()
+        self.load_sales()
 
     def _show_details(self, sale_id):
         sale = self._sales_data.get(sale_id)

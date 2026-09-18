@@ -173,6 +173,14 @@ class PaymentDialog(QDialog):
         self.amount_input.setStyleSheet(INPUT_STYLE)
         form.addRow("المبلغ المدفوع:", self.amount_input)
 
+        self.date_edit = QDateEdit()
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDate(QDate.currentDate())
+        self.date_edit.setDisplayFormat("yyyy-MM-dd")
+        self.date_edit.setStyleSheet(INPUT_STYLE)
+        style_calendar(self.date_edit)
+        form.addRow("التاريخ:", self.date_edit)
+
         self.notes_input = QLineEdit()
         self.notes_input.setPlaceholderText("ملاحظات (اختياري)")
         self.notes_input.setStyleSheet(INPUT_STYLE)
@@ -195,7 +203,12 @@ class PaymentDialog(QDialog):
         layout.addLayout(btn_row)
 
     def get_data(self):
-        return {'amount': self.amount_input.value(), 'notes': self.notes_input.text().strip()}
+        d = self.date_edit.date()
+        return {
+            'amount': self.amount_input.value(),
+            'notes':  self.notes_input.text().strip(),
+            'date':   f"{d.year()}-{d.month():02d}-{d.day():02d}",
+        }
 
 
 class CustomerHistoryDialog(QDialog):
@@ -707,7 +720,7 @@ class CustomersPage(QWidget):
         dlg = PaymentDialog(self, customer)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             d = dlg.get_data()
-            db.add_payment(cid, d['amount'], d['notes'])
+            db.add_payment(cid, d['amount'], d['notes'], d['date'])
             self.load_customers()
             show_info(self, "تم بنجاح", f"✓  تم تسجيل دفعة {d['amount']:.2f} ج.م")
 

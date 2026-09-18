@@ -214,6 +214,7 @@ class NewPurchaseReturnDialog(QDialog):
             p = self.products_data[index]
             self.unit_input.setText(p['unit'])
             self.price_spin.setValue(p['purchase_price'])
+            self.inv_type_combo.setCurrentText(p.get('product_type') or 'بيطري')
 
     def _add_item(self):
         idx = self.product_combo.currentIndex()

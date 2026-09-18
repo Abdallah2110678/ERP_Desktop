@@ -6,6 +6,23 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QColor, QPalette, QTextCharFormat
 from PyQt6.QtCore import Qt, QObject, QEvent, QDate, QLocale
 
+# ── UI scale ──────────────────────────────────────────────────────────────────
+_S: float = 1.0   # set by init_scale() before any UI imports
+UI_SCALE: float = 1.0  # public alias used by page widgets
+
+def px(n: float) -> int:
+    """Scale a pixel value by the current UI scale factor."""
+    return max(1, int(n * _S))
+
+def init_scale(screen_height: int) -> None:
+    """Compute scale from screen height and rebuild all style strings.
+    Call this after QApplication creation and before importing any UI modules.
+    """
+    global _S, UI_SCALE
+    _S = max(1.0, min(2.5, screen_height / 1080.0))
+    UI_SCALE = _S
+    _rebuild()
+
 # ── Color palette ──────────────────────────────────────────────────────────────
 C_SIDEBAR        = "#0f1f2e"
 C_SIDEBAR_HOVER  = "#162c40"
@@ -43,87 +60,18 @@ def card_shadow(widget, blur=22, y=5, alpha=28):
     widget.setGraphicsEffect(shadow)
 
 
-# ── Sidebar ─────────────────────────────────────────────────────────────────────
-SIDEBAR_STYLE = f"""
-QWidget#sidebar {{
-    background-color: {C_SIDEBAR};
-}}
-QPushButton#nav_btn {{
-    background-color: transparent;
-    color: #8fa8bf;
-    border: none;
-    border-right: 3px solid transparent;
-    padding: 13px 18px;
-    text-align: right;
-    font-size: 13px;
-    font-family: Tahoma;
-    border-radius: 0;
-}}
-QPushButton#nav_btn:hover {{
-    background-color: {C_SIDEBAR_HOVER};
-    color: #cde0f0;
-}}
-QPushButton#nav_btn:checked {{
-    background-color: {C_SIDEBAR_ACTIVE};
-    color: #ffffff;
-    border-right: 4px solid #2ecc71;
-    font-weight: bold;
-}}
-"""
-
-# ── Tables ───────────────────────────────────────────────────────────────────────
-TABLE_STYLE = f"""
-QTableWidget {{
-    background-color: {C_WHITE};
-    border: 1px solid {C_CARD_BORDER};
-    border-radius: 10px;
-    gridline-color: transparent;
-    font-size: 13px;
-    font-family: Tahoma;
-    outline: none;
-}}
-QTableWidget::item {{
-    padding: 9px 12px;
-    border-bottom: 1px solid #f0f3f7;
-}}
-QTableWidget::item:selected {{
-    background-color: #d5f5e3;
-    color: {C_PRIMARY_DARK};
-}}
-QTableWidget::item:alternate {{
-    background-color: {C_ROW_ALT};
-}}
-QHeaderView::section {{
-    background-color: #2c3e50;
-    color: #ecf0f1;
-    padding: 10px 12px;
-    font-size: 12px;
-    font-family: Tahoma;
-    font-weight: bold;
-    border: none;
-    border-right: 1px solid #3d5166;
-}}
-QHeaderView::section:last {{
-    border-right: none;
-}}
-QScrollBar:vertical {{
-    background: #f0f3f7; width: 8px; border-radius: 4px;
-}}
-QScrollBar::handle:vertical {{
-    background: #bdc3cc; border-radius: 4px; min-height: 30px;
-}}
-"""
-
-# ── Buttons ───────────────────────────────────────────────────────────────────────
-def _btn(bg, hover, text="#fff", padding="10px 22px", font="13px"):
+# ── Buttons helper (used inside _rebuild) ────────────────────────────────────────
+def _btn(bg, hover, text="#fff", padding=None, font=None):
+    p = padding or f"{px(10)}px {px(22)}px"
+    f = font or f"{px(13)}px"
     return f"""
 QPushButton {{
     background-color: {bg};
     color: {text};
     border: none;
-    padding: {padding};
+    padding: {p};
     border-radius: 7px;
-    font-size: {font};
+    font-size: {f};
     font-family: Tahoma;
     font-weight: bold;
 }}
@@ -132,22 +80,74 @@ QPushButton:pressed {{ background-color: {hover}; }}
 QPushButton:disabled {{ background-color: #ced4da; color: #868e96; }}
 """
 
-BTN_ADD      = _btn(C_PRIMARY,      C_PRIMARY_DARK)
-BTN_EDIT     = _btn(C_INFO,         C_INFO_DARK,    padding="7px 15px", font="12px")
-BTN_DELETE   = _btn(C_DANGER,       C_DANGER_DARK,  padding="7px 15px", font="12px")
-BTN_ORANGE   = _btn(C_ORANGE,       C_ORANGE_DARK)
-BTN_PURPLE   = _btn(C_PURPLE,       C_PURPLE_DARK,  padding="7px 12px", font="11px")
-BTN_HISTORY  = _btn(C_PURPLE,       C_PURPLE_DARK,  padding="7px 12px", font="11px")
-BTN_PAY      = _btn(C_ORANGE,       C_ORANGE_DARK,  padding="7px 12px", font="11px")
-BTN_SECONDARY = _btn("#6c757d",     "#5a6268")
 
-# ── Inputs ────────────────────────────────────────────────────────────────────────
-INPUT_STYLE = f"""
+def _rebuild() -> None:
+    """Rebuild all style-string constants using current _S scale factor."""
+    global SIDEBAR_STYLE, TABLE_STYLE, INPUT_STYLE, DIALOG_STYLE, PAGE_STYLE
+    global BTN_ADD, BTN_EDIT, BTN_DELETE, BTN_SECONDARY, BTN_ORANGE
+    global BTN_PURPLE, BTN_HISTORY, BTN_PAY, _BTN_CSS, _DLG_CSS
+
+    f11 = px(11); f12 = px(12); f13 = px(13); f14 = px(14)
+
+    SIDEBAR_STYLE = f"""
+QWidget#sidebar {{ background-color: {C_SIDEBAR}; }}
+QPushButton#nav_btn {{
+    background-color: transparent;
+    color: #8fa8bf;
+    border: none;
+    border-right: 3px solid transparent;
+    padding: {px(13)}px {px(18)}px;
+    text-align: right;
+    font-size: {f13}px;
+    font-family: Tahoma;
+    border-radius: 0;
+}}
+QPushButton#nav_btn:hover {{ background-color: {C_SIDEBAR_HOVER}; color: #cde0f0; }}
+QPushButton#nav_btn:checked {{
+    background-color: {C_SIDEBAR_ACTIVE};
+    color: #ffffff;
+    border-right: 4px solid #2ecc71;
+    font-weight: bold;
+}}
+"""
+
+    TABLE_STYLE = f"""
+QTableWidget {{
+    background-color: {C_WHITE};
+    border: 1px solid {C_CARD_BORDER};
+    border-radius: 10px;
+    gridline-color: transparent;
+    font-size: {f13}px;
+    font-family: Tahoma;
+    outline: none;
+}}
+QTableWidget::item {{
+    padding: {px(9)}px {px(12)}px;
+    border-bottom: 1px solid #f0f3f7;
+}}
+QTableWidget::item:selected {{ background-color: #d5f5e3; color: {C_PRIMARY_DARK}; }}
+QTableWidget::item:alternate {{ background-color: {C_ROW_ALT}; }}
+QHeaderView::section {{
+    background-color: #2c3e50;
+    color: #ecf0f1;
+    padding: {px(10)}px {px(12)}px;
+    font-size: {f12}px;
+    font-family: Tahoma;
+    font-weight: bold;
+    border: none;
+    border-right: 1px solid #3d5166;
+}}
+QHeaderView::section:last {{ border-right: none; }}
+QScrollBar:vertical {{ background: #f0f3f7; width: 8px; border-radius: 4px; }}
+QScrollBar::handle:vertical {{ background: #bdc3cc; border-radius: 4px; min-height: 30px; }}
+"""
+
+    INPUT_STYLE = f"""
 QLineEdit, QDoubleSpinBox, QSpinBox, QComboBox, QTextEdit, QDateEdit {{
-    padding: 9px 12px;
+    padding: {px(9)}px {px(12)}px;
     border: 1.5px solid {C_CARD_BORDER};
     border-radius: 7px;
-    font-size: 13px;
+    font-size: {f13}px;
     font-family: Tahoma;
     background: {C_WHITE};
     color: {C_TEXT_DARK};
@@ -160,31 +160,25 @@ QLineEdit:focus, QDoubleSpinBox:focus, QSpinBox:focus, QComboBox:focus, QDateEdi
 QLineEdit::placeholder {{ color: {C_TEXT_LIGHT}; }}
 QComboBox::drop-down {{
     border: none;
-    width: 26px;
+    width: {px(26)}px;
     subcontrol-origin: padding;
     subcontrol-position: left center;
     background: #eef1f5;
     border-radius: 0 5px 5px 0;
 }}
-QComboBox::down-arrow {{
-    width: 10px;
-    height: 10px;
-}}
+QComboBox::down-arrow {{ width: {px(10)}px; height: {px(10)}px; }}
 QDateEdit::drop-down {{
     border: none;
-    width: 26px;
+    width: {px(26)}px;
     subcontrol-origin: padding;
     subcontrol-position: left center;
     background: #eef1f5;
     border-radius: 0 5px 5px 0;
 }}
-QDateEdit::down-arrow {{
-    width: 10px;
-    height: 10px;
-}}
+QDateEdit::down-arrow {{ width: {px(10)}px; height: {px(10)}px; }}
 QDoubleSpinBox::up-button, QDoubleSpinBox::down-button,
 QSpinBox::up-button, QSpinBox::down-button {{
-    width: 22px; border: none; background: #f0f3f7; border-radius: 3px;
+    width: {px(22)}px; border: none; background: #f0f3f7; border-radius: 3px;
 }}
 QComboBox QAbstractItemView {{
     background: {C_WHITE};
@@ -194,28 +188,54 @@ QComboBox QAbstractItemView {{
     selection-background-color: {C_PRIMARY};
     selection-color: white;
     font-family: Tahoma;
-    font-size: 13px;
+    font-size: {f13}px;
     outline: none;
 }}
 QComboBox QAbstractItemView::item {{
-    padding: 6px 12px;
-    min-height: 28px;
+    padding: {px(6)}px {px(12)}px;
+    min-height: {px(28)}px;
 }}
 """
 
-# ── Dialog ────────────────────────────────────────────────────────────────────────
-DIALOG_STYLE = f"""
-QDialog {{
-    background-color: #f4f7fa;
-    font-family: Tahoma;
-}}
+    DIALOG_STYLE = f"""
+QDialog {{ background-color: #f4f7fa; font-family: Tahoma; }}
 QLabel {{
-    font-size: 13px;
+    font-size: {f13}px;
     color: {C_TEXT_DARK};
     font-family: Tahoma;
     background: transparent;
 }}
 """ + INPUT_STYLE
+
+    PAGE_STYLE = f"""
+QWidget {{ background-color: {C_PAGE_BG}; font-family: Tahoma; }}
+QLabel {{ font-family: Tahoma; background: transparent; }}
+"""
+
+    BTN_ADD       = _btn(C_PRIMARY,   C_PRIMARY_DARK)
+    BTN_EDIT      = _btn(C_INFO,      C_INFO_DARK,   padding=f"{px(7)}px {px(15)}px", font=f"{f12}px")
+    BTN_DELETE    = _btn(C_DANGER,    C_DANGER_DARK, padding=f"{px(7)}px {px(15)}px", font=f"{f12}px")
+    BTN_ORANGE    = _btn(C_ORANGE,    C_ORANGE_DARK)
+    BTN_PURPLE    = _btn(C_PURPLE,    C_PURPLE_DARK, padding=f"{px(7)}px {px(12)}px", font=f"{f11}px")
+    BTN_HISTORY   = _btn(C_PURPLE,    C_PURPLE_DARK, padding=f"{px(7)}px {px(12)}px", font=f"{f11}px")
+    BTN_PAY       = _btn(C_ORANGE,    C_ORANGE_DARK, padding=f"{px(7)}px {px(12)}px", font=f"{f11}px")
+    BTN_SECONDARY = _btn("#6c757d",   "#5a6268")
+
+    _BTN_CSS = (
+        f"padding: {px(9)}px {px(28)}px; border-radius: 7px; font-size: {f13}px; "
+        "font-family: Tahoma; font-weight: bold; min-width: 90px; border: none; color: white;"
+    )
+    _DLG_CSS = f"""
+    QMessageBox {{ background-color: #ffffff; font-family: Tahoma; }}
+    QMessageBox QLabel {{
+        color: #1a2535; font-size: {f14}px; font-family: Tahoma;
+        background: transparent; min-width: 240px;
+    }}
+"""
+
+
+# Initialise with default (1 × scale) so constants exist before init_scale() is called
+_rebuild()
 
 # ── Calendar popup helper ─────────────────────────────────────────────────────
 _CALENDAR_CSS = """
@@ -459,23 +479,7 @@ def style_calendar(date_edit):
 
 
 # ── Shared dialog helpers ─────────────────────────────────────────────────────
-_BTN_CSS = (
-    "padding: 9px 28px; border-radius: 7px; font-size: 13px; "
-    "font-family: Tahoma; font-weight: bold; min-width: 90px; border: none; color: white;"
-)
-_DLG_CSS = """
-    QMessageBox {
-        background-color: #ffffff;
-        font-family: Tahoma;
-    }
-    QMessageBox QLabel {
-        color: #1a2535;
-        font-size: 14px;
-        font-family: Tahoma;
-        background: transparent;
-        min-width: 240px;
-    }
-"""
+# _BTN_CSS and _DLG_CSS are set by _rebuild() (scaled values)
 
 
 def _make_dlg(parent, title, message, icon):
@@ -558,14 +562,4 @@ def setup_searchable_combo(combo: QComboBox):
     combo.setCompleter(completer)
 
 
-# ── Page ─────────────────────────────────────────────────────────────────────────
-PAGE_STYLE = f"""
-QWidget {{
-    background-color: {C_PAGE_BG};
-    font-family: Tahoma;
-}}
-QLabel {{
-    font-family: Tahoma;
-    background: transparent;
-}}
-"""
+# PAGE_STYLE is set by _rebuild() (scaled values)
