@@ -248,6 +248,9 @@ class CustomerAccountPage(QWidget):
         self.customer_combo.clear()
         for c in db.get_all_customers():
             self.customer_combo.addItem(c['name'], c['id'])
+        # start empty (placeholder visible) instead of pre-selecting the first customer
+        self.customer_combo.setCurrentIndex(-1)
+        self.customer_combo.clearEditText()
 
     def _load_account(self):
         cid = self.customer_combo.currentData()

@@ -1,12 +1,13 @@
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QPushButton, QStackedWidget, QLabel, QFrame,
-    QFileDialog, QMessageBox, QMenu,
+    QFileDialog, QMessageBox, QMenu, QApplication,
 )
 from PyQt6.QtCore import Qt, QTimer, QDateTime
 from PyQt6.QtGui import QFont
 import shutil
 from datetime import date
+from pathlib import Path
 
 from ui.dashboard import DashboardPage
 from ui.products import ProductsPage
@@ -275,6 +276,8 @@ class MainWindow(QMainWindow):
         """)
         menu.addAction("📤  تصدير البيانات (نسخة احتياطية)", self._export_data)
         menu.addAction("📥  استيراد البيانات (استعادة)", self._import_data)
+        menu.addSeparator()
+        menu.addAction("🗄  استيراد من Access (.mdb)", self._import_access)
         btn = self._backup_btn
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
@@ -363,6 +366,66 @@ class MainWindow(QMainWindow):
             self._navigate(0)
         except Exception as e:
             QMessageBox.critical(self, "خطأ في الاستيراد", f"فشل الاستيراد:\n{e}")
+
+    def _import_access(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "اختر قاعدة بيانات Access", "", "Access (*.mdb *.accdb)"
+        )
+        if not path:
+            return
+
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle("استيراد من Access")
+        box.setText(
+            "سيتم إضافة العملاء والموردين والأصناف والفواتير والمرتجعات والدفعات "
+            "إلى البيانات الحالية (بدون حذف أي شيء).\n\n"
+            "قبل البدء تُحفظ نسخة احتياطية تلقائياً بجوار قاعدة البيانات.\n\n"
+            "هل تريد استيراد أرصدة الديون المحسوبة من الفواتير؟\n"
+            "(الأرصدة المحسوبة من الملف القديم قد تكون كبيرة وغير دقيقة — يُنصح بعدم استيرادها)"
+        )
+        no_debt = box.addButton("استيراد بدون الديون (موصى به)", QMessageBox.ButtonRole.AcceptRole)
+        with_debt = box.addButton("استيراد مع الديون", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("إلغاء", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked not in (no_debt, with_debt):
+            return
+
+        try:
+            import import_access
+        except ImportError:
+            QMessageBox.critical(self, "خطأ", "مكتبة pyodbc غير مثبتة.\nثبّتها بالأمر: pip install pyodbc")
+            return
+
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            stats, backup = import_access.run_import(
+                Path(path), commit=True, skip_debt=(clicked is no_debt))
+        except import_access.AlreadyImported:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.warning(self, "تم الاستيراد سابقاً",
+                "فواتير Access موجودة بالفعل في قاعدة البيانات.\n"
+                "إعادة الاستيراد ستكرر الفواتير، لذلك تم إيقافه.")
+            return
+        except Exception as e:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.critical(self, "خطأ في الاستيراد",
+                f"فشل الاستيراد ولم يتم تغيير أي بيانات:\n{e}")
+            return
+        QApplication.restoreOverrideCursor()
+
+        labels = [
+            ("products", "أصناف جديدة"), ("customers", "عملاء جدد"), ("suppliers", "موردون جدد"),
+            ("sales", "فواتير بيع"), ("sale returns", "مرتجعات بيع"),
+            ("purchases", "فواتير شراء"), ("purchase returns", "مرتجعات شراء"),
+            ("customer payments", "دفعات عملاء"), ("supplier payments", "دفعات موردين"),
+        ]
+        lines = "\n".join(f"{name}: {stats.get(key, 0):,}" for key, name in labels)
+        QMessageBox.information(self, "تم بنجاح",
+            f"✓  تم استيراد البيانات من Access\n\n{lines}\n\n"
+            f"النسخة الاحتياطية السابقة:\n{backup}")
+        self._navigate(0)
 
     def _change_credentials(self):
         dlg = ChangePasswordDialog(self._current_user, self)

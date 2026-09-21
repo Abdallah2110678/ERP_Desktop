@@ -114,6 +114,7 @@ QPushButton#nav_btn:checked {{
     TABLE_STYLE = f"""
 QTableWidget {{
     background-color: {C_WHITE};
+    color: {C_TEXT_DARK};
     border: 1px solid {C_CARD_BORDER};
     border-radius: 10px;
     gridline-color: transparent;

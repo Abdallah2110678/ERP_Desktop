@@ -252,6 +252,9 @@ class ProductReportPage(QWidget):
         self.product_combo.clear()
         for p in db.get_all_products():
             self.product_combo.addItem(p['name'], p['id'])
+        # start empty (placeholder visible) instead of pre-selecting the first product
+        self.product_combo.setCurrentIndex(-1)
+        self.product_combo.clearEditText()
 
     def _load_report(self):
         pid = self.product_combo.currentData()

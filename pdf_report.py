@@ -233,6 +233,45 @@ def _draw_return_block(c, y, ret_date, items, total_amount, footer_label):
     return y
 
 
+def _draw_type_block(c, y, rows, total_label, total_amount, footer_label):
+    """
+    One table for a whole product type (not per bill): rows = [(date, item), ...]
+    → a single total row. The header repeats on each new page. Returns updated y.
+    """
+    ICW  = [75, 85, 55, 50, 85, 165]   # Σ = 515
+    ICX  = _col_xs(ICW)
+    IHDR = [("الاجمالي ج.م", "c"), ("سعر الوحدة", "c"),
+            ("الكمية", "c"), ("الوحدة", "c"),
+            ("التاريخ", "c"), ("اسم الصنف", "r")]
+
+    def _hdr(cv):
+        return _draw_table_header(cv, MT, IHDR, ICX, ICW)
+
+    y = _draw_table_header(c, y, IHDR, ICX, ICW)
+    for i, (day, it) in enumerate(rows):
+        y = _maybe_new_page(c, y, 80, footer_label, _hdr)
+        row = [
+            (f"{it['total']:.2f}",               "c"),
+            (f"{it['unit_price']:.2f}",           "c"),
+            (f"{it['quantity']:.2f}",             "c"),
+            (str(it.get('unit_name', '') or ''),  "c"),
+            (str(day),                            "c"),
+            (str(it.get('product_name', '')),     "r"),
+        ]
+        _draw_row(c, y, row, ICX, ICW, shaded=(i % 2 == 0), size=9)
+        y -= ROW_H
+
+    y = _maybe_new_page(c, y, 50, footer_label)
+    SFTR_H = 20
+    c.setFillColor(colors.HexColor("#d5d8dc"))
+    c.setStrokeColor(DARK_GRAY);  c.setLineWidth(0.6)
+    c.rect(ML, y + 4 - SFTR_H, TW, SFTR_H, fill=1, stroke=1)
+    c.setFillColor(BLACK);  c.setFont("ArBold", 9)
+    c.drawRightString(MR - 8, y + 4 - SFTR_H + 6,
+                      _ar(f"{total_label}: {total_amount:.2f} ج.م"))
+    return y - SFTR_H - 8
+
+
 def _draw_invoice_block(c, y, inv_date, items, total_amount, paid_amount,
                         remaining, pay_type, footer_label):
     """
@@ -447,40 +486,25 @@ def generate_customer_account(customer_id: int, date_from: str, date_to: str) ->
     _ltext(c, f"المستحق في الفترة :  {owed:.2f} ج.م", ML + 8, y - 14, "ArBold", 11)
     y -= box_h + 14
 
-    def _sales_section(title, items):
+    def _section(title, docs, get_items, total_label):
+        """One table per product type: every line of every bill together, one total."""
         nonlocal y
-        if not items:
+        if not docs:
             return
+        y = _maybe_new_page(c, y, 120, "كشف حساب العميل")
         _rtext(c, title, MR, y, "ArBold", 11)
         y -= 6;  _hline(c, y, width=0.7);  y -= 10
-        for s in items:
-            y = _maybe_new_page(c, y, 120, "كشف حساب العميل")
-            sale_items = db.get_sale_items(s['id'])
-            y = _draw_invoice_block(c, y, s['date'], sale_items,
-                                    s['total_amount'], s.get('paid_amount', 0),
-                                    s.get('remaining', 0), s.get('payment_type', 'cash'),
-                                    "كشف حساب العميل")
+        rows = [(d['date'], it) for d in docs for it in get_items(d['id'])]
+        y = _draw_type_block(c, y, rows, total_label,
+                             sum(d['total_amount'] for d in docs), "كشف حساب العميل")
         y -= 6
 
-    def _returns_section(title, items):
-        nonlocal y
-        if not items:
-            return
-        _rtext(c, title, MR, y, "ArBold", 11)
-        y -= 6;  _hline(c, y, width=0.7);  y -= 10
-        for r in items:
-            y = _maybe_new_page(c, y, 120, "كشف حساب العميل")
-            return_items = db.get_sale_return_items(r['id'])
-            y = _draw_return_block(c, y, r['date'], return_items,
-                                   r['total_amount'], "كشف حساب العميل")
-        y -= 6
-
-    _sales_section("مبيعات بيطري", vet_sales)
-    _sales_section("مبيعات أعلاف", feed_sales)
-    _sales_section("مبيعات نثريات", other_sales)
-    _returns_section("مرتجعات بيطري", vet_returns)
-    _returns_section("مرتجعات أعلاف", feed_returns)
-    _returns_section("مرتجعات نثريات", other_returns)
+    for kind, docs, get_items, total_label in (
+        ("مبيعات", (vet_sales, feed_sales, other_sales), db.get_sale_items, "اجمالي المبيعات"),
+        ("مرتجعات", (vet_returns, feed_returns, other_returns), db.get_sale_return_items, "اجمالي المرتجعات"),
+    ):
+        for type_name, group in zip(("بيطري", "أعلاف", "نثريات"), docs):
+            _section(f"{kind} {type_name}", group, get_items, f"{total_label} {type_name}")
 
     # Payments table
     if payments:

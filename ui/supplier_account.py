@@ -241,6 +241,9 @@ class SupplierAccountPage(QWidget):
         self.supplier_combo.clear()
         for s in db.get_all_suppliers():
             self.supplier_combo.addItem(s['name'], s['id'])
+        # start empty (placeholder visible) instead of pre-selecting the first supplier
+        self.supplier_combo.setCurrentIndex(-1)
+        self.supplier_combo.clearEditText()
 
     def _load_account(self):
         sid = self.supplier_combo.currentData()
