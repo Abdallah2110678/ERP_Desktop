@@ -19,7 +19,8 @@ Mapping (Access -> pharmacy.db)
     users, expenses, cartoon_sizes, new, ~TMP* are not imported.
 
 Rows are inserted directly (not through create_sale etc.), so stock, batches and
-total_debt are computed here once at the end instead of per row.
+total_debt are set here once at the end instead of per row.
+Stock rule: a new product's quantity = count1 of its first purchase row in Orders.
 """
 import argparse
 import shutil
@@ -86,7 +87,7 @@ class Importer:
         self.products = {(r[0], r[1]): r[2] for r in lite.execute("SELECT name, unit, id FROM products")}
         self.code_pid = {}          # Access item code -> products.id
         self.new_pids = set()       # products created by this import (only these get computed stock)
-        self.stock = defaultdict(float)
+        self.first_purchase = {}    # products.id -> count1 of its oldest purchase row in Orders
         self.cust_debt = defaultdict(float)
         self.supp_debt = defaultdict(float)
         self.cost = {}              # products.id -> purchase_price, for the opening batch
@@ -188,8 +189,6 @@ class Importer:
                     " total) VALUES (?,?,?,?,?,?,?)", [(cur.lastrowid, *i) for i in items])
                 if cid:
                     self.cust_debt[cid] += remaining
-                for i in items:
-                    self.stock[i[0]] -= i[2]
                 self.stats["sales"] += 1
             else:
                 cur = self.lite.execute(
@@ -200,8 +199,6 @@ class Importer:
                     " unit_price, total) VALUES (?,?,?,?,?,?,?)", [(cur.lastrowid, *i) for i in items])
                 if cid:
                     self.cust_debt[cid] -= total
-                for i in items:
-                    self.stock[i[0]] += i[2]
                 self.stats["sale returns"] += 1
 
     def import_orders(self):
@@ -228,8 +225,8 @@ class Importer:
                     " unit_price, total) VALUES (?,?,?,?,?,?,?)", [(cur.lastrowid, *i) for i in items])
                 if sid:
                     self.supp_debt[sid] += remaining
-                for i in items:
-                    self.stock[i[0]] += i[2]
+                for i in items:     # groups arrive oldest-first, so the first one seen per product wins
+                    self.first_purchase.setdefault(i[0], i[2])
                 self.stats["purchases"] += 1
             else:
                 cur = self.lite.execute(
@@ -240,8 +237,6 @@ class Importer:
                     " unit_price, total) VALUES (?,?,?,?,?,?,?)", [(cur.lastrowid, *i) for i in items])
                 if sid:
                     self.supp_debt[sid] -= total
-                for i in items:
-                    self.stock[i[0]] -= i[2]
                 self.stats["purchase returns"] += 1
 
     def import_payments(self):
@@ -279,12 +274,12 @@ class Importer:
             self.stats[f"{table} total debt"] = f"{total:,.0f}"
 
     def apply_stock(self):
-        """Opening stock for NEW products = purchases - purchase returns - sales + sale returns (never below 0)."""
+        """Quantity for NEW products = Orders.count1 of the product's first purchase row (the old sheet's number).
+
+        Later purchases and all sales are deliberately not added/subtracted.
+        """
         for pid in self.new_pids:
-            qty = self.stock.get(pid, 0.0)
-            if qty < 0:
-                self.stats["new products whose computed stock was negative (set to 0)"] += 1
-                qty = 0.0
+            qty = self.first_purchase.get(pid, 0.0)
             if qty > 0:
                 self.lite.execute("UPDATE products SET quantity=? WHERE id=?", (qty, pid))
                 self.lite.execute(

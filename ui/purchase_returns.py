@@ -13,6 +13,7 @@ from ui.styles import (
     C_TEXT_DARK, C_TEXT_MED, C_DANGER, C_ORANGE,
 )
 from ui.products import page_header
+from ui.return_detail import ReturnDetailDialog
 
 
 class NewPurchaseReturnDialog(QDialog):
@@ -198,9 +199,15 @@ class NewPurchaseReturnDialog(QDialog):
 
     def _load_products(self):
         self.products_data = db.get_all_products()
+        # Fill the list WITHOUT selecting anything: the box starts empty (placeholder visible) and the
+        # unit / price fields stay blank until the user actually picks a product.
+        self.product_combo.blockSignals(True)
         self.product_combo.clear()
         for p in self.products_data:
             self.product_combo.addItem(p['name'], p['id'])
+        self.product_combo.setCurrentIndex(-1)
+        self.product_combo.clearEditText()
+        self.product_combo.blockSignals(False)
 
     def _load_suppliers(self):
         self._suppliers = db.get_all_suppliers()
@@ -331,6 +338,7 @@ class PurchaseReturnsPage(QWidget):
         super().__init__()
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setStyleSheet(PAGE_STYLE + TABLE_STYLE)
+        self._returns_data = {}
         self._setup_ui()
         self.load_returns()
 
@@ -383,6 +391,7 @@ class PurchaseReturnsPage(QWidget):
 
     def load_returns(self):
         returns = db.get_all_purchase_returns()
+        self._returns_data = {r['id']: r for r in returns}
         self.table.setRowCount(len(returns))
         for row, r in enumerate(returns):
             date_item = QTableWidgetItem(r['date'])
@@ -424,9 +433,7 @@ class PurchaseReturnsPage(QWidget):
             self.load_returns()
 
     def _show_details(self, return_id):
-        items = db.get_purchase_return_items(return_id)
-        msg = f"تفاصيل مرتجع الشراء رقم {return_id}:\n\n"
-        for item in items:
-            msg += f"•  {item['product_name']}   ×{item['quantity']:.2f}   @{item['unit_price']:.2f} ج.م  =  {item['total']:.2f} ج.م\n"
-        from ui.styles import show_info
-        show_info(self, "تفاصيل المرتجع", msg)
+        ret = self._returns_data.get(return_id)
+        if not ret:
+            return
+        ReturnDetailDialog(ret, db.get_purchase_return_items(return_id), 'purchase', self).exec()

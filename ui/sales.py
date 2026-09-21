@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox, QMessageBox, QHeaderView, QComboBox, QFrame,
     QCompleter, QDateEdit,
 )
-from PyQt6.QtCore import Qt, QDate, QTimer
+from PyQt6.QtCore import Qt, QDate, QTimer, QStringListModel
 from PyQt6.QtGui import QColor, QFont
 import database as db
 import pdf_report
@@ -63,6 +63,17 @@ class NewSaleDialog(QDialog):
         self.customer_combo.setStyleSheet(INPUT_STYLE)
 
         self.customer_search.textChanged.connect(self._filter_customers)
+
+        # Live list of every matching name while typing, so similar names ("فانوس", "ابو احمد فانوس"...)
+        # can be told apart and picked. Picking fills the box with the exact name, and
+        # _filter_customers then selects that exact customer in the combo.
+        self._cust_names = QStringListModel(self)
+        completer = QCompleter(self._cust_names, self)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        completer.setMaxVisibleItems(12)
+        self.customer_search.setCompleter(completer)
 
         cust_row.addWidget(self.customer_combo)
         cust_row.addWidget(self.customer_search)
@@ -295,6 +306,7 @@ class NewSaleDialog(QDialog):
     def _load_customers(self):
         self._all_customers = db.get_all_customers()
         self._populate_customer_combo(self._all_customers)
+        self._cust_names.setStringList(list(dict.fromkeys(c['name'] for c in self._all_customers)))
 
     def _populate_customer_combo(self, customers):
         self.customer_combo.blockSignals(True)
@@ -312,13 +324,21 @@ class NewSaleDialog(QDialog):
             filtered = [c for c in self._all_customers if q in c['name'].lower()]
             self._populate_customer_combo(filtered)
             if filtered:
-                self.customer_combo.setCurrentIndex(1)
+                # an exact name (e.g. just picked from the list) beats "first partial match"
+                exact = self.customer_combo.findText(query.strip(), Qt.MatchFlag.MatchFixedString)
+                self.customer_combo.setCurrentIndex(exact if exact > 0 else 1)
 
     def _load_products(self):
         self.products_data = db.get_all_products()
+        # Fill the list WITHOUT selecting anything: the box starts empty (placeholder visible) and the
+        # unit / price fields stay blank until the user actually picks a product.
+        self.product_combo.blockSignals(True)
         self.product_combo.clear()
         for p in self.products_data:
             self.product_combo.addItem(p['name'], p['id'])
+        self.product_combo.setCurrentIndex(-1)
+        self.product_combo.clearEditText()
+        self.product_combo.blockSignals(False)
 
     def _on_product_changed(self, index):
         if 0 <= index < len(self.products_data):

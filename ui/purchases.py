@@ -318,9 +318,15 @@ class NewPurchaseDialog(QDialog):
 
     def _load_products(self):
         self.products_data = db.get_all_products()
+        # Fill the list WITHOUT selecting anything: the box starts empty (placeholder visible) and the
+        # unit / price fields stay blank until the user actually picks a product.
+        self.product_combo.blockSignals(True)
         self.product_combo.clear()
         for p in self.products_data:
             self.product_combo.addItem(p['name'], p['id'])
+        self.product_combo.setCurrentIndex(-1)
+        self.product_combo.clearEditText()
+        self.product_combo.blockSignals(False)
 
     def _load_suppliers(self):
         self._suppliers = db.get_all_suppliers()
