@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QDoubleSpinBox, QHeaderView, QFrame,
     QTabWidget, QDateEdit,
 )
-from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtCore import Qt, QDate, QTimer
 from PyQt6.QtGui import QColor, QFont, QPalette
 import database as db
 from ui.styles import (
@@ -407,10 +407,17 @@ class SupplierPdfRangeDialog(QDialog):
 
 
 class SuppliersPage(QWidget):
+    PAGE_ROWS = 100     # rows shown at a time; the rest load via "عرض المزيد" or the search box
+
     def __init__(self):
         super().__init__()
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setStyleSheet(PAGE_STYLE + TABLE_STYLE)
+        self._limit = self.PAGE_ROWS
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(250)     # wait for the user to stop typing
+        self._search_timer.timeout.connect(self.load_suppliers)
         self._setup_ui()
         self.load_suppliers()
 
@@ -439,9 +446,17 @@ class SuppliersPage(QWidget):
         self.search_input.setPlaceholderText("🔍   ابحث عن مورد أو شركة...")
         self.search_input.setStyleSheet(INPUT_STYLE)
         self.search_input.setMaximumWidth(320)
-        self.search_input.textChanged.connect(self._search)
+        self.search_input.textChanged.connect(self._on_search_changed)
         toolbar.addWidget(self.search_input)
         toolbar.addStretch()
+        self._more_btn = QPushButton("عرض المزيد")
+        self._more_btn.setStyleSheet(
+            "QPushButton { background:#2980b9; color:white; border:none; padding:7px 15px;"
+            " border-radius:7px; font-size:12px; font-family:Tahoma; font-weight:bold; }"
+            "QPushButton:hover { background:#2471a3; }")
+        self._more_btn.clicked.connect(self._show_more)
+        self._more_btn.hide()
+        toolbar.addWidget(self._more_btn)
         self.count_label = QLabel()
         self.count_label.setStyleSheet(f"color: {C_TEXT_MED}; font-size: 12px;")
         toolbar.addWidget(self.count_label)
@@ -474,6 +489,12 @@ class SuppliersPage(QWidget):
     def load_suppliers(self, suppliers=None):
         if suppliers is None:
             suppliers = db.get_all_suppliers()
+            q = self.search_input.text().strip().lower()
+            if q:
+                suppliers = [x for x in suppliers if q in x['name'].lower()]
+        all_rows = suppliers
+        suppliers = suppliers[:self._limit]
+        self.table.setUpdatesEnabled(False)
 
         self.table.setRowCount(len(suppliers))
         for row, s in enumerate(suppliers):
@@ -537,17 +558,23 @@ class SuppliersPage(QWidget):
             self.table.setCellWidget(row, 0, btn_w)
             self.table.setRowHeight(row, 54)
 
-        total_debt = sum(s['total_debt'] for s in suppliers)
+        self.table.setUpdatesEnabled(True)
+
+        total_debt = sum(s['total_debt'] for s in all_rows)
+        has_more = len(all_rows) > len(suppliers)
+        self._more_btn.setVisible(has_more)
+        shown = f"  (المعروض {len(suppliers)} — استخدم البحث أو «عرض المزيد»)" if has_more else ""
         self.count_label.setText(
-            f"عدد الموردين: {len(suppliers)}   |   إجمالي المستحقات: {total_debt:.2f} ج.م"
+            f"عدد الموردين: {len(all_rows)}{shown}   |   إجمالي المستحقات: {total_debt:.2f} ج.م"
         )
 
-    def _search(self, query):
-        suppliers = db.get_all_suppliers()
-        if query.strip():
-            q = query.strip().lower()
-            suppliers = [s for s in suppliers if q in s['name'].lower()]
-        self.load_suppliers(suppliers)
+    def _on_search_changed(self, _text):
+        self._limit = self.PAGE_ROWS
+        self._search_timer.start()
+
+    def _show_more(self):
+        self._limit += self.PAGE_ROWS
+        self.load_suppliers()
 
     def _add_supplier(self):
         dlg = SupplierDialog(self)

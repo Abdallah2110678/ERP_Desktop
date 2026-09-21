@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox, QMessageBox, QHeaderView, QComboBox, QFrame,
     QCompleter, QDateEdit,
 )
-from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtCore import Qt, QDate, QTimer
 from PyQt6.QtGui import QColor, QFont
 import database as db
 import pdf_report
@@ -598,12 +598,19 @@ class SaleDetailDialog(QDialog):
 
 
 class SalesPage(QWidget):
+    PAGE_ROWS = 300     # invoices shown at a time; the rest load via "عرض المزيد" or the search box
+
     def __init__(self):
         super().__init__()
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setStyleSheet(PAGE_STYLE + TABLE_STYLE)
         self._row_ids = []
         self._sales_data = {}
+        self._limit = self.PAGE_ROWS
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(250)     # wait for the user to stop typing
+        self._search_timer.timeout.connect(self.load_sales)
         self._setup_ui()
         self.load_sales()
 
@@ -713,7 +720,7 @@ class SalesPage(QWidget):
         self._search_box.setPlaceholderText("🔍  بحث باسم العميل أو رقم الفاتورة...")
         self._search_box.setStyleSheet(INPUT_STYLE)
         self._search_box.setMaximumWidth(320)
-        self._search_box.textChanged.connect(self._filter_table)
+        self._search_box.textChanged.connect(self._on_search_changed)
         sb.addWidget(tbl_title)
         sb.addStretch()
         sb.addWidget(self._search_box)
@@ -736,27 +743,41 @@ class SalesPage(QWidget):
         self.table.cellClicked.connect(self._on_row_click)
         tl.addWidget(self.table)
 
+        footer = QHBoxLayout()
+        footer.setContentsMargins(16, 8, 16, 8)
+        self._more_btn = QPushButton("عرض المزيد")
+        self._more_btn.setStyleSheet(BTN_EDIT)
+        self._more_btn.clicked.connect(self._show_more)
+        self._more_btn.hide()
+        self._shown_lbl = QLabel()
+        self._shown_lbl.setStyleSheet(
+            f"color: {C_TEXT_MED}; font-size: 11px; background: transparent; border: none;")
+        footer.addWidget(self._more_btn)
+        footer.addStretch()
+        footer.addWidget(self._shown_lbl)
+        tl.addLayout(footer)
+
         layout.addWidget(self.table_frame)
 
-    def _filter_table(self, query):
-        q = query.strip().lower()
-        for row in range(self.table.rowCount()):
-            cust_item = self.table.item(row, 4)
-            id_item   = self.table.item(row, 6)
-            cust = cust_item.text().lower() if cust_item else ""
-            inv  = id_item.text().lower() if id_item else ""
-            self.table.setRowHidden(row, bool(q) and q not in cust and q not in inv)
+    def _on_search_changed(self, _text):
+        self._limit = self.PAGE_ROWS
+        self._search_timer.start()
+
+    def _show_more(self):
+        self._limit += self.PAGE_ROWS
+        self.load_sales()
 
     def load_sales(self):
-        sales = db.get_all_sales()
+        query = self._search_box.text()
+        rows = db.get_sales(query, self._limit + 1)     # +1 tells us whether there are more
+        has_more = len(rows) > self._limit
+        sales = rows[:self._limit]
         type_map = {'cash': 'نقدي', 'credit': 'آجل', 'partial': 'جزئي'}
         self._row_ids = [s['id'] for s in sales]
         self._sales_data = {s['id']: s for s in sales}
-        self.table.setRowCount(len(sales))
 
-        total_amount = 0.0
-        total_paid   = 0.0
-        total_credit = 0.0
+        self.table.setUpdatesEnabled(False)
+        self.table.setRowCount(len(sales))
 
         for row, s in enumerate(sales):
             id_item = QTableWidgetItem(f"# {s['id']}")
@@ -791,14 +812,19 @@ class SalesPage(QWidget):
 
             self.table.setRowHeight(row, 44)
 
-            total_amount += s['total_amount']
-            total_paid   += s['paid_amount']
-            total_credit += s['remaining']
+        self.table.setUpdatesEnabled(True)
 
-        self._lbl_count.setText(str(len(sales)))
-        self._lbl_total.setText(f"{total_amount:,.2f} ج.م")
-        self._lbl_paid.setText(f"{total_paid:,.2f} ج.م")
-        self._lbl_credit.setText(f"{total_credit:,.2f} ج.م")
+        # Stat cards always cover ALL invoices, whatever the table is showing.
+        summary = db.get_sales_summary()
+        self._lbl_count.setText(f"{summary['count']:,}")
+        self._lbl_total.setText(f"{summary['total']:,.2f} ج.م")
+        self._lbl_paid.setText(f"{summary['paid']:,.2f} ج.م")
+        self._lbl_credit.setText(f"{summary['remaining']:,.2f} ج.م")
+
+        self._more_btn.setVisible(has_more)
+        self._shown_lbl.setText(
+            f"عرض {len(sales):,} فاتورة — استخدم البحث أو «عرض المزيد» للفواتير الأقدم"
+            if has_more else f"عرض {len(sales):,} فاتورة")
 
     def _on_row_click(self, row, _col):
         if 0 <= row < len(self._row_ids):

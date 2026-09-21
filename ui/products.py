@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QDoubleSpinBox, QMessageBox, QHeaderView, QFrame, QComboBox,
     QSizePolicy, QDateEdit,
 )
-from PyQt6.QtCore import Qt, QDate, QLocale
+from PyQt6.QtCore import Qt, QDate, QLocale, QTimer
 from PyQt6.QtGui import QColor, QFont, QPalette
 import database as db
 from ui.styles import (
@@ -226,10 +226,17 @@ class ProductDialog(QDialog):
 
 
 class ProductsPage(QWidget):
+    PAGE_ROWS = 200     # products shown at a time; the rest load via "عرض المزيد" or the search box
+
     def __init__(self):
         super().__init__()
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setStyleSheet(PAGE_STYLE + TABLE_STYLE)
+        self._limit = self.PAGE_ROWS
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(250)     # wait for the user to stop typing
+        self._search_timer.timeout.connect(self.load_products)
         self._setup_ui()
         self.load_products()
 
@@ -276,9 +283,14 @@ class ProductsPage(QWidget):
         self.search_input.setPlaceholderText("🔍   ابحث عن دواء بالاسم...")
         self.search_input.setStyleSheet(INPUT_STYLE)
         self.search_input.setMaximumWidth(320)
-        self.search_input.textChanged.connect(self._search)
+        self.search_input.textChanged.connect(self._on_search_changed)
         toolbar.addWidget(self.search_input)
         toolbar.addStretch()
+        self._more_btn = QPushButton("عرض المزيد")
+        self._more_btn.setStyleSheet(BTN_EDIT)
+        self._more_btn.clicked.connect(self._show_more)
+        self._more_btn.hide()
+        toolbar.addWidget(self._more_btn)
         self.count_label = QLabel()
         self.count_label.setStyleSheet(f"color: {C_TEXT_MED}; font-size: 12px;")
         toolbar.addWidget(self.count_label)
@@ -314,7 +326,10 @@ class ProductsPage(QWidget):
 
     def load_products(self, products=None):
         if products is None:
-            products = db.get_all_products()
+            q = self.search_input.text()
+            products = db.search_products(q) if q.strip() else db.get_all_products()
+        total = len(products)
+        products = products[:self._limit]
 
         from datetime import date as _date, timedelta
         expiry_map  = db.get_product_nearest_expiries()
@@ -322,6 +337,7 @@ class ProductsPage(QWidget):
         today_str   = today.strftime('%Y-%m-%d')
         warn_cutoff = (today + timedelta(days=90)).strftime('%Y-%m-%d')
 
+        self.table.setUpdatesEnabled(False)
         self.table.setRowCount(len(products))
         for row, p in enumerate(products):
             self.table.setItem(row, 8, QTableWidgetItem(str(p['id'])))
@@ -399,11 +415,21 @@ class ProductsPage(QWidget):
             self.table.setCellWidget(row, 0, btn_w)
             self.table.setRowHeight(row, 54)
 
-        self.count_label.setText(f"عدد الأدوية: {len(products)}")
+        self.table.setUpdatesEnabled(True)
 
-    def _search(self, query):
-        products = db.search_products(query) if query.strip() else db.get_all_products()
-        self.load_products(products)
+        has_more = total > len(products)
+        self._more_btn.setVisible(has_more)
+        self.count_label.setText(
+            f"عدد الأدوية: {total:,}  (المعروض {len(products):,} — استخدم البحث أو «عرض المزيد»)"
+            if has_more else f"عدد الأدوية: {total:,}")
+
+    def _on_search_changed(self, _text):
+        self._limit = self.PAGE_ROWS
+        self._search_timer.start()
+
+    def _show_more(self):
+        self._limit += self.PAGE_ROWS
+        self.load_products()
 
     def _add_product(self):
         dlg = ProductDialog(self)

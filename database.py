@@ -204,6 +204,30 @@ def init_db():
         except Exception:
             pass
 
+    # Indexes: without them every lookup by invoice / customer / product scans the whole table.
+    # Created after the migrations above (some columns are added there). IF NOT EXISTS = cheap on later starts.
+    for idx_sql in [
+        "CREATE INDEX IF NOT EXISTS idx_sales_date_id ON sales(date, id)",
+        "CREATE INDEX IF NOT EXISTS idx_sales_customer ON sales(customer_id, date)",
+        "CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id)",
+        "CREATE INDEX IF NOT EXISTS idx_sale_items_product ON sale_items(product_id)",
+        "CREATE INDEX IF NOT EXISTS idx_purchases_date_id ON purchases(date, id)",
+        "CREATE INDEX IF NOT EXISTS idx_purchases_supplier ON purchases(supplier_id, date)",
+        "CREATE INDEX IF NOT EXISTS idx_purchase_items_purchase ON purchase_items(purchase_id)",
+        "CREATE INDEX IF NOT EXISTS idx_purchase_items_product ON purchase_items(product_id)",
+        "CREATE INDEX IF NOT EXISTS idx_sale_returns_customer ON sale_returns(customer_id, date)",
+        "CREATE INDEX IF NOT EXISTS idx_sale_return_items_return ON sale_return_items(return_id)",
+        "CREATE INDEX IF NOT EXISTS idx_purchase_returns_supplier ON purchase_returns(supplier_id, date)",
+        "CREATE INDEX IF NOT EXISTS idx_purchase_return_items_return ON purchase_return_items(return_id)",
+        "CREATE INDEX IF NOT EXISTS idx_payments_customer ON payments(customer_id, date)",
+        "CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier ON supplier_payments(supplier_id, date)",
+        "CREATE INDEX IF NOT EXISTS idx_product_batches_product ON product_batches(product_id)",
+        "CREATE INDEX IF NOT EXISTS idx_product_units_product ON product_units(product_id)",
+        "CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)",
+    ]:
+        conn.execute(idx_sql)
+    conn.commit()
+
     conn.close()
 
 
@@ -538,6 +562,34 @@ def get_all_sales():
     rows = conn.execute("SELECT * FROM sales ORDER BY date DESC, id DESC").fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_sales(query='', limit=None):
+    """Newest first. `query` matches customer name or invoice number; `limit` caps the rows returned."""
+    sql, params = "SELECT * FROM sales", []
+    q = query.strip()
+    if q:
+        sql += " WHERE customer_name LIKE ? OR CAST(id AS TEXT) LIKE ?"
+        params += [f"%{q}%", f"%{q}%"]
+    sql += " ORDER BY date DESC, id DESC"
+    if limit:
+        sql += " LIMIT ?"
+        params.append(limit)
+    conn = get_connection()
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_sales_summary():
+    """Totals over ALL invoices (used by the stat cards, independent of what the table shows)."""
+    conn = get_connection()
+    count, total, paid, remaining = conn.execute(
+        "SELECT COUNT(*), COALESCE(SUM(total_amount), 0), COALESCE(SUM(paid_amount), 0),"
+        " COALESCE(SUM(remaining), 0) FROM sales"
+    ).fetchone()
+    conn.close()
+    return {'count': count, 'total': total, 'paid': paid, 'remaining': remaining}
 
 
 def get_sale(sale_id):
