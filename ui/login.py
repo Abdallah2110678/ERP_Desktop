@@ -271,11 +271,14 @@ class LoginDialog(QDialog):
             db.set_credentials(username, password)
             self.logged_in_username = username
             self.accept()
+        elif not db.user_exists(username):
+            self._set_error("اسم المستخدم غير موجود")
+            self.username_edit.selectAll()
+            self.username_edit.setFocus()
+        elif not db.verify_credentials(username, password):
+            self._set_error("كلمة المرور غير صحيحة")
+            self.password_edit.clear()
+            self.password_edit.setFocus()
         else:
-            if db.verify_credentials(username, password):
-                self.logged_in_username = username
-                self.accept()
-            else:
-                self._set_error("اسم المستخدم أو كلمة المرور غير صحيح")
-                self.password_edit.clear()
-                self.password_edit.setFocus()
+            self.logged_in_username = username
+            self.accept()
