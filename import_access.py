@@ -87,7 +87,10 @@ class Importer:
         self.products = {(r[0], r[1]): r[2] for r in lite.execute("SELECT name, unit, id FROM products")}
         self.code_pid = {}          # Access item code -> products.id
         self.new_pids = set()       # products created by this import (only these get computed stock)
-        self.first_purchase = {}    # products.id -> count1 of its oldest purchase row in Orders
+        self.qty_purchased  = defaultdict(float)  # pid -> total purchased quantity
+        self.qty_sold       = defaultdict(float)  # pid -> total sold quantity
+        self.qty_ret_sup    = defaultdict(float)  # pid -> total returned to supplier
+        self.qty_ret_cust   = defaultdict(float)  # pid -> total returned from customer
         self.cust_debt = defaultdict(float)
         self.supp_debt = defaultdict(float)
         self.cost = {}              # products.id -> purchase_price, for the opening batch
@@ -198,6 +201,8 @@ class Importer:
                     " total) VALUES (?,?,?,?,?,?,?)", [(cur.lastrowid, *i) for i in items])
                 if cid:
                     self.cust_debt[cid] += remaining
+                for i in items:
+                    self.qty_sold[i[0]] += i[2]
                 self.stats["sales"] += 1
             else:
                 cur = self.lite.execute(
@@ -208,6 +213,8 @@ class Importer:
                     " unit_price, total) VALUES (?,?,?,?,?,?,?)", [(cur.lastrowid, *i) for i in items])
                 if cid:
                     self.cust_debt[cid] -= total
+                for i in items:
+                    self.qty_ret_cust[i[0]] += i[2]
                 self.stats["sale returns"] += 1
 
     def import_orders(self):
@@ -238,8 +245,8 @@ class Importer:
                     " unit_price, total) VALUES (?,?,?,?,?,?,?)", [(cur.lastrowid, *i) for i in items])
                 if sid:
                     self.supp_debt[sid] += remaining
-                for i in items:     # groups arrive oldest-first, so the first one seen per product wins
-                    self.first_purchase.setdefault(i[0], i[2])
+                for i in items:
+                    self.qty_purchased[i[0]] += i[2]
                 self.stats["purchases"] += 1
             else:
                 cur = self.lite.execute(
@@ -250,6 +257,8 @@ class Importer:
                     " unit_price, total) VALUES (?,?,?,?,?,?,?)", [(cur.lastrowid, *i) for i in items])
                 if sid:
                     self.supp_debt[sid] -= total
+                for i in items:
+                    self.qty_ret_sup[i[0]] += i[2]
                 self.stats["purchase returns"] += 1
 
     def import_payments(self):
@@ -287,14 +296,15 @@ class Importer:
             self.stats[f"{table} total debt"] = f"{total:,.0f}"
 
     def apply_stock(self):
-        """Quantity for NEW products = Orders.count1 of the product's first purchase row (the old sheet's number).
-
-        Later purchases and all sales are deliberately not added/subtracted.
-        """
+        """Stock for NEW products = total purchased - total sold - purchase returns + sale returns."""
         for pid in self.new_pids:
-            qty = self.first_purchase.get(pid, 0.0)
+            qty = (self.qty_purchased.get(pid, 0.0)
+                   - self.qty_sold.get(pid, 0.0)
+                   - self.qty_ret_sup.get(pid, 0.0)
+                   + self.qty_ret_cust.get(pid, 0.0))
+            qty = max(0.0, qty)
+            self.lite.execute("UPDATE products SET quantity=? WHERE id=?", (qty, pid))
             if qty > 0:
-                self.lite.execute("UPDATE products SET quantity=? WHERE id=?", (qty, pid))
                 self.lite.execute(
                     "INSERT INTO product_batches (product_id, quantity, purchase_price, expiry_date)"
                     " VALUES (?, ?, ?, NULL)", (pid, qty, self.cost.get(pid, 0.0)))
