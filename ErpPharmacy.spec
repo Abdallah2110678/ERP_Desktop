@@ -33,6 +33,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=['icon.ico'],
+    # version='version_info.txt',   # Arabic file properties; the build with this was flagged by Defender (Bearfoos.A!ml)
 )
 coll = COLLECT(
     exe,

@@ -2,9 +2,9 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QDialog, QLineEdit,
     QDoubleSpinBox, QMessageBox, QHeaderView, QComboBox, QFrame,
-    QCompleter, QDateEdit,
+    QDateEdit,
 )
-from PyQt6.QtCore import Qt, QDate, QTimer, QStringListModel
+from PyQt6.QtCore import Qt, QDate, QTimer
 from PyQt6.QtGui import QColor, QFont
 import database as db
 import pdf_report
@@ -53,30 +53,15 @@ class NewSaleDialog(QDialog):
         cust_lbl = QLabel("العميل:")
         cust_lbl.setFixedWidth(60)
 
-        self.customer_search = QLineEdit()
-        self.customer_search.setPlaceholderText("🔍  ابحث باسم العميل أو اتركه فارغاً للنقدي...")
-        self.customer_search.setStyleSheet(INPUT_STYLE)
-        self.customer_search.setMinimumWidth(300)
-
+        # One field: type to search (live match list, same as every other search-combo in the app)
+        # or leave it on "عميل نقدي (بدون حساب)" for a cash sale.
         self.customer_combo = QComboBox()
-        self.customer_combo.setMinimumWidth(240)
+        self.customer_combo.setMinimumWidth(420)
         self.customer_combo.setStyleSheet(INPUT_STYLE)
-
-        self.customer_search.textChanged.connect(self._filter_customers)
-
-        # Live list of every matching name while typing, so similar names ("فانوس", "ابو احمد فانوس"...)
-        # can be told apart and picked. Picking fills the box with the exact name, and
-        # _filter_customers then selects that exact customer in the combo.
-        self._cust_names = QStringListModel(self)
-        completer = QCompleter(self._cust_names, self)
-        completer.setFilterMode(Qt.MatchFlag.MatchContains)
-        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
-        completer.setMaxVisibleItems(12)
-        self.customer_search.setCompleter(completer)
+        setup_searchable_combo(self.customer_combo)
+        self.customer_combo.lineEdit().setPlaceholderText("🔍  ابحث باسم العميل أو اتركه فارغاً للنقدي...")
 
         cust_row.addWidget(self.customer_combo)
-        cust_row.addWidget(self.customer_search)
         cust_row.addWidget(cust_lbl)
         cust_row.addStretch()
         layout.addLayout(cust_row)
@@ -305,28 +290,16 @@ class NewSaleDialog(QDialog):
 
     def _load_customers(self):
         self._all_customers = db.get_all_customers()
-        self._populate_customer_combo(self._all_customers)
-        self._cust_names.setStringList(list(dict.fromkeys(c['name'] for c in self._all_customers)))
-
-    def _populate_customer_combo(self, customers):
         self.customer_combo.blockSignals(True)
         self.customer_combo.clear()
         self.customer_combo.addItem("عميل نقدي (بدون حساب)", None)
-        for c in customers:
+        for c in self._all_customers:
             self.customer_combo.addItem(c['name'], c['id'])
+        # Start empty (placeholder visible) rather than pre-selecting "عميل نقدي"; an empty
+        # box still resolves to a cash sale at confirm time (see _confirm_sale).
+        self.customer_combo.setCurrentIndex(-1)
+        self.customer_combo.clearEditText()
         self.customer_combo.blockSignals(False)
-
-    def _filter_customers(self, query):
-        q = query.strip().lower()
-        if not q:
-            self._populate_customer_combo(self._all_customers)
-        else:
-            filtered = [c for c in self._all_customers if q in c['name'].lower()]
-            self._populate_customer_combo(filtered)
-            if filtered:
-                # an exact name (e.g. just picked from the list) beats "first partial match"
-                exact = self.customer_combo.findText(query.strip(), Qt.MatchFlag.MatchFixedString)
-                self.customer_combo.setCurrentIndex(exact if exact > 0 else 1)
 
     def _load_products(self):
         self.products_data = db.get_all_products()
@@ -465,9 +438,7 @@ class NewSaleDialog(QDialog):
     def _reset_for_next_sale(self):
         self.cart.clear()
         self._refresh_cart()
-        self.customer_search.clear()
         self._load_customers()
-        self.customer_combo.setCurrentIndex(0)
         self.notes_input.clear()
         self._load_products()
         self.total_label.setText("0.00 ج.م")
@@ -482,8 +453,17 @@ class NewSaleDialog(QDialog):
         total     = sum(item['total'] for item in self.cart)
         paid      = self.paid_spin.value()
         remaining = max(0, total - paid)
-        cid       = self.customer_combo.currentData()
-        cname     = self.customer_combo.currentText().split("   —")[0]
+        # An exact match against the picked item's own text is what actually confirms a real
+        # customer is selected (typing a name without picking it from the list must not, on its
+        # own, count as choosing that customer — see purchases.py's supplier resolution).
+        idx  = self.customer_combo.currentIndex()
+        text = self.customer_combo.currentText().strip()
+        if idx >= 0 and text == self.customer_combo.itemText(idx):
+            cid   = self.customer_combo.itemData(idx)
+            cname = text if cid is not None else "عميل نقدي"
+        else:
+            cid   = None
+            cname = "عميل نقدي"
 
         if remaining > 0 and cid is None:
             show_warning(self, "تحذير",

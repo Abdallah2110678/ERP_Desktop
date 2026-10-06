@@ -1259,6 +1259,13 @@ def update_username(user_id: int, new_username: str) -> bool:
         conn.close()
 
 
+def user_exists(username: str) -> bool:
+    conn = get_connection()
+    row = conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone()
+    conn.close()
+    return row is not None
+
+
 def verify_credentials(username: str, password: str) -> bool:
     conn = get_connection()
     row = conn.execute(
