@@ -1499,6 +1499,9 @@
    'C:\\Program '
    'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\\Lib\\http\\server.py',
    'PYMODULE'),
+  ('import_access',
+   'D:\\projects\\erp_desktop\\ERP_Desktop\\import_access.py',
+   'PYMODULE'),
   ('importlib',
    'C:\\Program '
    'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\\Lib\\importlib\\__init__.py',
@@ -2665,6 +2668,9 @@
    'PYMODULE'),
   ('ui.purchases',
    'D:\\projects\\erp_desktop\\ERP_Desktop\\ui\\purchases.py',
+   'PYMODULE'),
+  ('ui.return_detail',
+   'D:\\projects\\erp_desktop\\ERP_Desktop\\ui\\return_detail.py',
    'PYMODULE'),
   ('ui.sale_returns',
    'D:\\projects\\erp_desktop\\ERP_Desktop\\ui\\sale_returns.py',

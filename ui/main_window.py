@@ -402,12 +402,6 @@ class MainWindow(QMainWindow):
         try:
             stats, backup = import_access.run_import(
                 Path(path), commit=True, skip_debt=(clicked is no_debt))
-        except import_access.AlreadyImported:
-            QApplication.restoreOverrideCursor()
-            QMessageBox.warning(self, "تم الاستيراد سابقاً",
-                "فواتير Access موجودة بالفعل في قاعدة البيانات.\n"
-                "إعادة الاستيراد ستكرر الفواتير، لذلك تم إيقافه.")
-            return
         except Exception as e:
             QApplication.restoreOverrideCursor()
             QMessageBox.critical(self, "خطأ في الاستيراد",
@@ -416,15 +410,20 @@ class MainWindow(QMainWindow):
         QApplication.restoreOverrideCursor()
 
         labels = [
-            ("products", "أصناف جديدة"), ("customers", "عملاء جدد"), ("suppliers", "موردون جدد"),
-            ("sales", "فواتير بيع"), ("sale returns", "مرتجعات بيع"),
-            ("purchases", "فواتير شراء"), ("purchase returns", "مرتجعات شراء"),
+            ("products",   "أصناف جديدة"),      ("customers", "عملاء جدد"),
+            ("suppliers",  "موردون جدد"),
+            ("sales",      "فواتير بيع جديدة"),  ("sales skipped (already imported)", "فواتير بيع موجودة (تخطي)"),
+            ("sale returns", "مرتجعات بيع"),
+            ("purchases",  "فواتير شراء جديدة"), ("purchases skipped (already imported)", "فواتير شراء موجودة (تخطي)"),
+            ("purchase returns", "مرتجعات شراء"),
             ("customer payments", "دفعات عملاء"), ("supplier payments", "دفعات موردين"),
         ]
-        lines = "\n".join(f"{name}: {stats.get(key, 0):,}" for key, name in labels)
+        lines = "\n".join(
+            f"{name}: {stats.get(key, 0):,}" for key, name in labels if stats.get(key, 0)
+        )
+        backup_line = f"\n\nالنسخة الاحتياطية:\n{backup}" if backup else ""
         QMessageBox.information(self, "تم بنجاح",
-            f"✓  تم استيراد البيانات من Access\n\n{lines}\n\n"
-            f"النسخة الاحتياطية السابقة:\n{backup}")
+            f"✓  تم استيراد البيانات من Access\n\n{lines or 'لا توجد بيانات جديدة'}{backup_line}")
         self._navigate(0)
 
     def _change_credentials(self):

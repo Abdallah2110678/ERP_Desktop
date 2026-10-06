@@ -91,6 +91,11 @@ class Importer:
         self.cust_debt = defaultdict(float)
         self.supp_debt = defaultdict(float)
         self.cost = {}              # products.id -> purchase_price, for the opening batch
+        # Notes of bills already in the ERP — used to skip duplicates on re-import
+        self.done_sales = {r[0] for r in lite.execute(
+            "SELECT notes FROM sales WHERE notes LIKE ?", (MARKER,))}
+        self.done_orders = {r[0] for r in lite.execute(
+            "SELECT notes FROM purchases WHERE notes LIKE ?", (MARKER,))}
 
     def rows(self, sql):
         return self.acc.cursor().execute(sql).fetchall()
@@ -171,10 +176,14 @@ class Importer:
                          " sale_date, is_sale, unit, [type], is_agel, paid FROM sales ORDER BY sale_date, pk")
         groups = self._group(rows, (4, 3, 8, 9, 12, 11))   # bill, client, date, is_sale, is_agel, type
         for (bill, client, sdate, is_sale, is_agel, typ), lines in groups.items():
+            note = NOTE.format(bill)
+            if note in self.done_sales:
+                self.stats["sales skipped (already imported)"] += 1
+                continue
             cname, cid = _txt(client), self.customer(client)
             cname = cname if cid else "عميل نقدي"
             total = sum(_num(l[7]) for l in lines)
-            typ, day, note = _txt(typ) or DEFAULT_TYPE, _day(sdate), NOTE.format(bill)
+            typ, day = _txt(typ) or DEFAULT_TYPE, _day(sdate)
             items = [(self.product_for(l[1], _txt(l[2]), _txt(l[10]), _num(l[6])), _txt(l[2]),
                       _num(l[5]), _txt(l[10]), _num(l[6]), _num(l[7])) for l in lines]
             if is_sale:
@@ -207,10 +216,14 @@ class Importer:
                          " bill_num, unit, [type], is_agel, paid, is_order FROM Orders ORDER BY order_date, pk")
         groups = self._group(rows, (8, 7, 6, 13, 11))       # bill, supplier, date, is_order, is_agel
         for (bill, supplier, odate, is_order, is_agel), lines in groups.items():
+            note = NOTE.format(bill)
+            if note in self.done_orders:
+                self.stats["purchases skipped (already imported)"] += 1
+                continue
             sname, sid = _txt(supplier), self.supplier(supplier)
             total = sum(_num(l[5]) for l in lines)
             typ = next((_txt(l[10]) for l in lines if _txt(l[10])), DEFAULT_TYPE)
-            day, note = _day(odate), NOTE.format(bill)
+            day = _day(odate)
             items = [(self.product_for(l[1], _txt(l[2]), _txt(l[9]), 0.0), _txt(l[2]),
                       _num(l[3]), _txt(l[9]), _num(l[4]), _num(l[5])) for l in lines]
             if is_order:
@@ -305,14 +318,13 @@ class AlreadyImported(Exception):
 def run_import(mdb: Path, commit: bool = True, skip_debt: bool = False, force: bool = False):
     """Import `mdb` into pharmacy.db. Returns (stats, backup_path or None).
 
+    Safe to run multiple times: bills already in the ERP are skipped automatically.
     With commit=False everything is done and then rolled back (dry run).
+    The `force` parameter is kept for CLI compatibility but no longer changes behaviour.
     """
     init_db()
     acc, lite = open_access(mdb), sqlite3.connect(DB_PATH)
     try:
-        if not force and lite.execute(
-                "SELECT 1 FROM sales WHERE notes LIKE ? LIMIT 1", (MARKER,)).fetchone():
-            raise AlreadyImported()
         backup = None
         if commit:      # copy BEFORE any write; a mid-transaction copy of the file can be inconsistent
             backup = DB_PATH.with_name(f"pharmacy.backup-{datetime.now():%Y%m%d-%H%M%S}.db")

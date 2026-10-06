@@ -47,7 +47,6 @@ class CustomerAccountPage(QWidget):
         fl.setSpacing(8)
 
         today = QDate.currentDate()
-        first_of_month = QDate(today.year(), today.month(), 1)
 
         # Customer label + combo (label first = rightmost in RTL)
         cust_lbl = QLabel("👤  العميل:")
@@ -63,7 +62,7 @@ class CustomerAccountPage(QWidget):
         date_from_lbl.setFixedWidth(30)
         self.date_from = QDateEdit()
         self.date_from.setCalendarPopup(True)
-        self.date_from.setDate(first_of_month)
+        self.date_from.setDate(QDate(2000, 1, 1))
         self.date_from.setDisplayFormat("yyyy-MM-dd")
         self.date_from.setStyleSheet(INPUT_STYLE)
         self.date_from.setFixedWidth(150)
@@ -124,6 +123,7 @@ class CustomerAccountPage(QWidget):
         for attr, title, color, bg in [
             ('vet_sales_table',    'المبيعات — بيطري',        C_PRIMARY, '#f0fff8'),
             ('feed_sales_table',   'المبيعات — أعلاف',         C_ORANGE,  '#fff8f0'),
+            ('other_sales_table',  'المبيعات — أخرى',          '#607d8b', '#f5f5f5'),
             ('vet_returns_table',  'مرتجعات البيع — بيطري',   C_DANGER,  '#fff0f0'),
             ('feed_returns_table', 'مرتجعات البيع — أعلاف',   '#8e44ad', '#faf0ff'),
         ]:
@@ -300,14 +300,16 @@ class CustomerAccountPage(QWidget):
                     table.setItem(row, col, _cell("—", C_TEXT_MED))
                 table.setRowHeight(row, 36)
 
-        vet_sales = [s for s in sales if s.get('invoice_type', 'بيطري') == 'بيطري']
-        feed_sales = [s for s in sales if s.get('invoice_type', 'بيطري') == 'أعلاف']
-        vet_returns = [r for r in returns if r.get('invoice_type', 'بيطري') == 'بيطري']
-        feed_returns = [r for r in returns if r.get('invoice_type', 'بيطري') == 'أعلاف']
+        vet_sales    = [s for s in sales if s.get('invoice_type') == 'بيطري']
+        feed_sales   = [s for s in sales if s.get('invoice_type') == 'أعلاف']
+        other_sales  = [s for s in sales if s.get('invoice_type') not in ('بيطري', 'أعلاف')]
+        vet_returns  = [r for r in returns if r.get('invoice_type') == 'بيطري']
+        feed_returns = [r for r in returns if r.get('invoice_type') == 'أعلاف']
 
-        fill_sales_table(self.vet_sales_table, 'vet_sales_table', vet_sales)
-        fill_sales_table(self.feed_sales_table, 'feed_sales_table', feed_sales)
-        fill_returns_table(self.vet_returns_table, 'vet_returns_table', vet_returns)
+        fill_sales_table(self.vet_sales_table,   'vet_sales_table',   vet_sales)
+        fill_sales_table(self.feed_sales_table,  'feed_sales_table',  feed_sales)
+        fill_sales_table(self.other_sales_table, 'other_sales_table', other_sales)
+        fill_returns_table(self.vet_returns_table,  'vet_returns_table',  vet_returns)
         fill_returns_table(self.feed_returns_table, 'feed_returns_table', feed_returns)
 
         # Payments table

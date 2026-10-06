@@ -565,12 +565,12 @@ def get_all_sales():
 
 
 def get_sales(query='', limit=None):
-    """Newest first. `query` matches customer name or invoice number; `limit` caps the rows returned."""
+    """Newest first. `query` matches customer name, invoice number, or notes (e.g. Access bill number)."""
     sql, params = "SELECT * FROM sales", []
     q = query.strip()
     if q:
-        sql += " WHERE customer_name LIKE ? OR CAST(id AS TEXT) LIKE ?"
-        params += [f"%{q}%", f"%{q}%"]
+        sql += " WHERE customer_name LIKE ? OR CAST(id AS TEXT) LIKE ? OR notes LIKE ?"
+        params += [f"%{q}%", f"%{q}%", f"%{q}%"]
     sql += " ORDER BY date DESC, id DESC"
     if limit:
         sql += " LIMIT ?"

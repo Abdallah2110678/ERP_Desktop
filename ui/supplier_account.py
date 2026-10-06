@@ -49,7 +49,6 @@ class SupplierAccountPage(QWidget):
         fl.setSpacing(8)
 
         today = QDate.currentDate()
-        first_of_month = QDate(today.year(), today.month(), 1)
 
         supp_lbl = QLabel("🏭  المورد:")
         supp_lbl.setFixedWidth(80)
@@ -63,7 +62,7 @@ class SupplierAccountPage(QWidget):
         date_from_lbl.setFixedWidth(30)
         self.date_from = QDateEdit()
         self.date_from.setCalendarPopup(True)
-        self.date_from.setDate(first_of_month)
+        self.date_from.setDate(QDate(2000, 1, 1))
         self.date_from.setDisplayFormat("yyyy-MM-dd")
         self.date_from.setStyleSheet(INPUT_STYLE)
         self.date_from.setFixedWidth(150)
