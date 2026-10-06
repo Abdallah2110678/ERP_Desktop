@@ -3,8 +3,9 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView,
 )
 from PyQt6.QtCore import Qt
+import database as db
 from ui.styles import (
-    DIALOG_STYLE, TABLE_STYLE, BTN_SECONDARY,
+    DIALOG_STYLE, TABLE_STYLE, BTN_SECONDARY, BTN_EDIT, confirm_delete,
     C_TEXT_DARK, C_TEXT_MED, C_DANGER,
 )
 
@@ -18,8 +19,15 @@ _KINDS = {
 class ReturnDetailDialog(QDialog):
     """Full bill view of a sale return or a purchase return (same layout as the invoice dialogs)."""
 
-    def __init__(self, ret, items, kind, parent=None):
+    def __init__(self, ret, items, kind, parent=None, edit_dialog_class=None, delete_fn=None):
         super().__init__(parent)
+        self._ret = ret
+        self._items = items
+        self._kind = kind
+        self._edit_dialog_class = edit_dialog_class
+        self._delete_fn = delete_fn
+        self.was_modified = False
+
         title, party_lbl, party_field, accent, sum_bg, sum_border = _KINDS[kind]
         self.setWindowTitle(f"تفاصيل {title} # {ret['id']}")
         self.resize(700, 520)
@@ -100,10 +108,44 @@ class ReturnDetailDialog(QDialog):
         sl.addStretch()
         layout.addWidget(summary)
 
+        # ── buttons ───────────────────────────────────────────────────────────
         btn_row = QHBoxLayout()
+
+        if edit_dialog_class:
+            edit_btn = QPushButton("✏️  تعديل")
+            edit_btn.setStyleSheet(BTN_EDIT)
+            edit_btn.clicked.connect(self._edit)
+            btn_row.addWidget(edit_btn)
+            btn_row.addSpacing(8)
+
+        if delete_fn:
+            delete_btn = QPushButton("🗑  حذف")
+            delete_btn.setStyleSheet(
+                "QPushButton { background: #e74c3c; color: white; border: none;"
+                " border-radius: 8px; padding: 10px 22px; font-family: Tahoma; font-size: 13px; }"
+                "QPushButton:hover { background: #c0392b; }"
+            )
+            delete_btn.clicked.connect(self._delete)
+            btn_row.addWidget(delete_btn)
+
+        btn_row.addStretch()
         close_btn = QPushButton("إغلاق")
         close_btn.setStyleSheet(BTN_SECONDARY)
         close_btn.clicked.connect(self.accept)
-        btn_row.addStretch()
         btn_row.addWidget(close_btn)
         layout.addLayout(btn_row)
+
+    def _edit(self):
+        dlg = self._edit_dialog_class(self, return_=self._ret, return_items=self._items)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self.was_modified = True
+            self.accept()
+
+    def _delete(self):
+        title = _KINDS[self._kind][0]
+        if confirm_delete(self,
+                          f"هل أنت متأكد من حذف {title} # {self._ret['id']}؟\n"
+                          "سيتم عكس التأثير على المخزون."):
+            self._delete_fn(self._ret['id'])
+            self.was_modified = True
+            self.accept()

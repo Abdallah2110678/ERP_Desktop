@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QDialog, QLineEdit,
-    QDoubleSpinBox, QMessageBox, QHeaderView, QComboBox, QFrame, QDateEdit,
+    QDoubleSpinBox, QHeaderView, QComboBox, QFrame, QDateEdit,
 )
 from PyQt6.QtCore import Qt, QDate, QLocale
 from PyQt6.QtGui import QColor, QFont
@@ -10,7 +10,7 @@ import pdf_report
 from ui.styles import (
     TABLE_STYLE, BTN_EDIT, BTN_SECONDARY, BTN_ORANGE,
     DIALOG_STYLE, PAGE_STYLE, INPUT_STYLE, card_shadow,
-    show_info, show_warning, show_error, style_calendar,
+    show_info, show_warning, show_error, confirm_delete, style_calendar,
     setup_searchable_combo,
     C_TEXT_DARK, C_TEXT_MED, C_DANGER, C_ORANGE,
 )
@@ -18,9 +18,14 @@ from ui.products import page_header
 
 
 class NewPurchaseDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, purchase=None, purchase_items=None):
         super().__init__(parent)
-        self.setWindowTitle("تسجيل فاتورة شراء جديدة")
+        self._edit_purchase = purchase
+        self._edit_items = purchase_items or []
+        self._bill_id = purchase['id'] if purchase else db.get_next_id('purchases')
+        title = (f"تعديل فاتورة شراء # {purchase['id']}" if purchase
+                 else "تسجيل فاتورة شراء جديدة")
+        self.setWindowTitle(title)
         self.resize(820, 620)
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setStyleSheet(DIALOG_STYLE + TABLE_STYLE)
@@ -29,6 +34,8 @@ class NewPurchaseDialog(QDialog):
         self._setup_ui()
         self._load_products()
         self._load_suppliers()
+        if purchase:
+            self._load_edit_data()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -40,10 +47,23 @@ class NewPurchaseDialog(QDialog):
         strip.setStyleSheet(f"background: {C_ORANGE}; border-radius: 3px; border: none;")
         layout.addWidget(strip)
 
-        title = QLabel("📦  تسجيل فاتورة شراء")
+        title_row = QHBoxLayout()
+        title_row.setSpacing(0)
+        title_text = (f"✏️  تعديل فاتورة شراء # {self._edit_purchase['id']}"
+                      if self._edit_purchase else "📦  تسجيل فاتورة شراء")
+        title = QLabel(title_text)
         title.setFont(QFont("Tahoma", 15, QFont.Weight.Bold))
         title.setStyleSheet(f"color: {C_TEXT_DARK};")
-        layout.addWidget(title)
+        title_row.addWidget(title)
+        title_row.addStretch()
+        num_lbl = QLabel(f"رقم الفاتورة:  # {self._bill_id}")
+        num_lbl.setFont(QFont("Tahoma", 13, QFont.Weight.Bold))
+        num_lbl.setStyleSheet(
+            f"color: white; background: {C_ORANGE};"
+            " border-radius: 6px; padding: 4px 14px;"
+        )
+        title_row.addWidget(num_lbl)
+        layout.addLayout(title_row)
 
         # Supplier row
         sup_row = QHBoxLayout()
@@ -307,7 +327,8 @@ class NewPurchaseDialog(QDialog):
         cancel_btn = QPushButton("إلغاء")
         cancel_btn.setStyleSheet(BTN_SECONDARY)
         cancel_btn.clicked.connect(self.reject)
-        confirm_btn = QPushButton("✓  تأكيد الشراء")
+        confirm_label = "✓  حفظ التعديلات" if self._edit_purchase else "✓  تأكيد الشراء"
+        confirm_btn = QPushButton(confirm_label)
         confirm_btn.setStyleSheet(BTN_ORANGE)
         confirm_btn.setDefault(True)
         confirm_btn.clicked.connect(self._confirm_purchase)
@@ -334,6 +355,51 @@ class NewPurchaseDialog(QDialog):
         self.supplier_combo.addItem("", None)
         for s in self._suppliers:
             self.supplier_combo.addItem(s['name'], s['id'])
+
+    def _load_edit_data(self):
+        p = self._edit_purchase
+        # Supplier
+        for i in range(self.supplier_combo.count()):
+            if self.supplier_combo.itemData(i) == p.get('supplier_id'):
+                self.supplier_combo.setCurrentIndex(i)
+                break
+        else:
+            self.supplier_combo.setCurrentText(p.get('supplier', '') or '')
+
+        # Payment type
+        pay_map = {'cash': 0, 'credit': 1, 'partial': 2}
+        self.pay_type_combo.setCurrentIndex(pay_map.get(p.get('payment_type', 'cash'), 0))
+        self._on_pay_type_changed(self.pay_type_combo.currentIndex())
+
+        # Invoice type
+        inv_idx = self.inv_type_combo.findText(p.get('invoice_type', 'بيطري'))
+        if inv_idx >= 0:
+            self.inv_type_combo.setCurrentIndex(inv_idx)
+
+        if p.get('payment_type') == 'partial':
+            self.paid_spin.setValue(p.get('paid_amount') or 0)
+
+        if p.get('payment_due_date'):
+            self.due_date_edit.setDate(QDate.fromString(p['payment_due_date'], "yyyy-MM-dd"))
+
+        self.notes_input.setText(p.get('notes', '') or '')
+
+        product_map = {prod['id']: prod for prod in self.products_data}
+        for pi in self._edit_items:
+            prod = product_map.get(pi.get('product_id')) if pi.get('product_id') else None
+            self.cart.append({
+                'product_id':   pi.get('product_id'),
+                'product_name': pi['product_name'],
+                'unit_name':    pi.get('unit_name', ''),
+                'quantity':     pi['quantity'],
+                'unit_price':   pi['unit_price'],
+                'selling_price': prod['selling_price'] if prod else pi['unit_price'],
+                'total':        pi['total'],
+                'expiry_date':  None,
+                'is_new':       False,
+            })
+        self._refresh_table()
+        self._update_total()
 
     def _on_pay_type_changed(self, index):
         pay = self.pay_type_combo.currentData()
@@ -489,19 +555,32 @@ class NewPurchaseDialog(QDialog):
             supplier_name = typed
             supplier_id   = db.add_supplier(typed, '', '')
 
-        purchase_id = db.create_purchase(supplier_id, supplier_name, self.cart, total, paid_amount, pay_type, notes, inv_type, payment_due_date)
-        show_info(self, "تم بنجاح",
-            f"✓  تم تسجيل فاتورة الشراء بنجاح\n"
-            f"رقم الفاتورة: {purchase_id}\n"
-            f"الإجمالي: {total:.2f} ج.م\n"
-            "تم تحديث المخزون تلقائياً")
+        if self._edit_purchase:
+            db.update_purchase(
+                self._edit_purchase['id'],
+                supplier_id, supplier_name, self.cart, total, paid_amount,
+                pay_type, notes, inv_type, payment_due_date,
+            )
+            show_info(self, "تم بنجاح",
+                f"✓  تم تعديل فاتورة الشراء # {self._edit_purchase['id']} بنجاح\n"
+                f"الإجمالي: {total:.2f} ج.م")
+        else:
+            purchase_id = db.create_purchase(supplier_id, supplier_name, self.cart, total, paid_amount, pay_type, notes, inv_type, payment_due_date)
+            show_info(self, "تم بنجاح",
+                f"✓  تم تسجيل فاتورة الشراء بنجاح\n"
+                f"رقم الفاتورة: {purchase_id}\n"
+                f"الإجمالي: {total:.2f} ج.م\n"
+                "تم تحديث المخزون تلقائياً")
         self.accept()
 
 
 class PurchaseDetailDialog(QDialog):
     def __init__(self, purchase, items, parent=None):
         super().__init__(parent)
+        self._purchase = purchase
+        self._items = items
         self._purchase_id = purchase['id']
+        self.was_modified = False
         self.setWindowTitle(f"تفاصيل فاتورة الشراء # {purchase['id']}")
         self.resize(700, 520)
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
@@ -595,10 +674,28 @@ class PurchaseDetailDialog(QDialog):
         print_btn = QPushButton("🖨️  طباعة الفاتورة")
         print_btn.setStyleSheet(BTN_ORANGE)
         print_btn.clicked.connect(self._print)
+
+        edit_btn = QPushButton("✏️  تعديل")
+        edit_btn.setStyleSheet(BTN_EDIT)
+        edit_btn.clicked.connect(self._edit)
+
+        delete_btn = QPushButton("🗑  حذف")
+        delete_btn.setStyleSheet(
+            "QPushButton { background: #e74c3c; color: white; border: none;"
+            " border-radius: 8px; padding: 10px 22px; font-family: Tahoma; font-size: 13px; }"
+            "QPushButton:hover { background: #c0392b; }"
+        )
+        delete_btn.clicked.connect(self._delete)
+
         close_btn = QPushButton("إغلاق")
         close_btn.setStyleSheet(BTN_SECONDARY)
         close_btn.clicked.connect(self.accept)
+
         btn_row.addWidget(print_btn)
+        btn_row.addSpacing(8)
+        btn_row.addWidget(edit_btn)
+        btn_row.addSpacing(8)
+        btn_row.addWidget(delete_btn)
         btn_row.addStretch()
         btn_row.addWidget(close_btn)
         layout.addLayout(btn_row)
@@ -610,6 +707,20 @@ class PurchaseDetailDialog(QDialog):
                 pdf_report.open_pdf(path)
         except Exception as e:
             show_error(self, "خطأ", f"تعذّر إنشاء الفاتورة:\n{e}")
+
+    def _edit(self):
+        dlg = NewPurchaseDialog(self, purchase=self._purchase, purchase_items=self._items)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self.was_modified = True
+            self.accept()
+
+    def _delete(self):
+        if confirm_delete(self,
+                          f"هل أنت متأكد من حذف فاتورة الشراء # {self._purchase_id}؟\n"
+                          "سيتم عكس التأثير على المخزون والموردين."):
+            db.delete_purchase(self._purchase_id)
+            self.was_modified = True
+            self.accept()
 
 
 class PurchasesPage(QWidget):
@@ -846,3 +957,5 @@ class PurchasesPage(QWidget):
         items = db.get_purchase_items(purchase_id)
         dlg = PurchaseDetailDialog(purchase, items, self)
         dlg.exec()
+        if dlg.was_modified:
+            self.load_purchases()

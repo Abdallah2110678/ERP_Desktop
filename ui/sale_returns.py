@@ -20,9 +20,14 @@ C_RETURN_DARK = "#7d3c98"
 
 
 class NewSaleReturnDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, return_=None, return_items=None):
         super().__init__(parent)
-        self.setWindowTitle("تسجيل مرتجع بيع")
+        self._edit_return = return_
+        self._edit_items = return_items or []
+        self._bill_id = return_['id'] if return_ else db.get_next_id('sale_returns')
+        title = (f"تعديل مرتجع بيع # {return_['id']}" if return_
+                 else "تسجيل مرتجع بيع")
+        self.setWindowTitle(title)
         self.resize(820, 600)
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setStyleSheet(DIALOG_STYLE + TABLE_STYLE)
@@ -30,6 +35,8 @@ class NewSaleReturnDialog(QDialog):
         self._setup_ui()
         self._load_customers()
         self._load_products()
+        if return_:
+            self._load_edit_data()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -41,10 +48,23 @@ class NewSaleReturnDialog(QDialog):
         strip.setStyleSheet(f"background: {C_RETURN}; border-radius: 3px; border: none;")
         layout.addWidget(strip)
 
-        title = QLabel("↩  تسجيل مرتجع بيع")
+        title_row = QHBoxLayout()
+        title_row.setSpacing(0)
+        title_text = (f"✏️  تعديل مرتجع بيع # {self._edit_return['id']}"
+                      if self._edit_return else "↩  تسجيل مرتجع بيع")
+        title = QLabel(title_text)
         title.setFont(QFont("Tahoma", 15, QFont.Weight.Bold))
         title.setStyleSheet(f"color: {C_TEXT_DARK};")
-        layout.addWidget(title)
+        title_row.addWidget(title)
+        title_row.addStretch()
+        num_lbl = QLabel(f"رقم المرتجع:  # {self._bill_id}")
+        num_lbl.setFont(QFont("Tahoma", 13, QFont.Weight.Bold))
+        num_lbl.setStyleSheet(
+            f"color: white; background: {C_RETURN};"
+            " border-radius: 6px; padding: 4px 14px;"
+        )
+        title_row.addWidget(num_lbl)
+        layout.addLayout(title_row)
 
         # Customer + invoice type row
         cust_row = QHBoxLayout()
@@ -189,7 +209,8 @@ class NewSaleReturnDialog(QDialog):
         cancel_btn = QPushButton("إلغاء")
         cancel_btn.setStyleSheet(BTN_SECONDARY)
         cancel_btn.clicked.connect(self.reject)
-        confirm_btn = QPushButton("✓  تأكيد المرتجع")
+        confirm_label = "✓  حفظ التعديلات" if self._edit_return else "✓  تأكيد المرتجع"
+        confirm_btn = QPushButton(confirm_label)
         confirm_btn.setStyleSheet(f"""
             QPushButton {{ background: {C_RETURN}; color: white; border: none;
                 padding: 10px 22px; border-radius: 8px; font-family: Tahoma; font-size: 13px; font-weight: bold; }}
@@ -221,6 +242,35 @@ class NewSaleReturnDialog(QDialog):
         self.product_combo.setCurrentIndex(-1)
         self.product_combo.clearEditText()
         self.product_combo.blockSignals(False)
+
+    def _load_edit_data(self):
+        r = self._edit_return
+        # Customer
+        for i in range(self.customer_combo.count()):
+            if self.customer_combo.itemData(i) == r.get('customer_id'):
+                self.customer_combo.setCurrentIndex(i)
+                break
+
+        inv_idx = self.inv_type_combo.findText(r.get('invoice_type', 'بيطري'))
+        if inv_idx >= 0:
+            self.inv_type_combo.setCurrentIndex(inv_idx)
+
+        if r.get('date'):
+            self.ret_date.setDate(QDate.fromString(r['date'], "yyyy-MM-dd"))
+
+        self.notes_input.setText(r.get('notes', '') or '')
+
+        for pi in self._edit_items:
+            self.cart.append({
+                'product_id':   pi.get('product_id'),
+                'product_name': pi['product_name'],
+                'unit_name':    pi.get('unit_name', ''),
+                'quantity':     pi['quantity'],
+                'unit_price':   pi['unit_price'],
+                'total':        pi['total'],
+            })
+        self._refresh_table()
+        self._update_total()
 
     def _on_product_changed(self, index):
         if 0 <= index < len(self.products_data):
@@ -322,11 +372,21 @@ class NewSaleReturnDialog(QDialog):
 
         _d = self.ret_date.date()
         ret_date = f"{_d.year()}-{_d.month():02d}-{_d.day():02d}"
-        db.create_sale_return(cid, cname, self.cart, total, inv_type, notes, date=ret_date)
-        show_info(self, "تم بنجاح",
-                  f"✓  تم تسجيل مرتجع البيع بنجاح\n"
-                  f"الإجمالي: {total:.2f} ج.م\n"
-                  "تم إضافة الأصناف للمخزون تلقائياً")
+
+        if self._edit_return:
+            db.update_sale_return(
+                self._edit_return['id'],
+                cid, cname, self.cart, total, inv_type, notes, ret_date,
+            )
+            show_info(self, "تم بنجاح",
+                      f"✓  تم تعديل مرتجع البيع # {self._edit_return['id']} بنجاح\n"
+                      f"الإجمالي: {total:.2f} ج.م")
+        else:
+            db.create_sale_return(cid, cname, self.cart, total, inv_type, notes, date=ret_date)
+            show_info(self, "تم بنجاح",
+                      f"✓  تم تسجيل مرتجع البيع بنجاح\n"
+                      f"الإجمالي: {total:.2f} ج.م\n"
+                      "تم إضافة الأصناف للمخزون تلقائياً")
         self.accept()
 
 
@@ -433,4 +493,11 @@ class SaleReturnsPage(QWidget):
         ret = self._returns_data.get(return_id)
         if not ret:
             return
-        ReturnDetailDialog(ret, db.get_sale_return_items(return_id), 'sale', self).exec()
+        dlg = ReturnDetailDialog(
+            ret, db.get_sale_return_items(return_id), 'sale', self,
+            edit_dialog_class=NewSaleReturnDialog,
+            delete_fn=db.delete_sale_return,
+        )
+        dlg.exec()
+        if dlg.was_modified:
+            self.load_returns()

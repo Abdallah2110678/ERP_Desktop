@@ -233,6 +233,16 @@ def init_db():
 
 # ===== Products =====
 
+def get_next_id(table_name):
+    """Return the next auto-increment ID for a table (last used + 1, or 1 if table is empty)."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT seq FROM sqlite_sequence WHERE name=?", (table_name,)
+    ).fetchone()
+    conn.close()
+    return (row['seq'] + 1) if row else 1
+
+
 def get_all_products():
     conn = get_connection()
     rows = conn.execute("SELECT * FROM products ORDER BY name").fetchall()
@@ -785,6 +795,138 @@ def get_purchase_return_items(return_id):
     return [dict(r) for r in rows]
 
 
+def delete_purchase_return(return_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    ret = cursor.execute("SELECT * FROM purchase_returns WHERE id=?", (return_id,)).fetchone()
+    if not ret:
+        conn.close()
+        return
+    ret = dict(ret)
+    items = [dict(r) for r in cursor.execute(
+        "SELECT * FROM purchase_return_items WHERE return_id=?", (return_id,)
+    ).fetchall()]
+    # Reverse: purchase return subtracted inventory, so add it back
+    for item in items:
+        if item.get('product_id'):
+            cursor.execute("UPDATE products SET quantity = quantity + ? WHERE id=?",
+                           (item['quantity'], item['product_id']))
+    if ret.get('supplier_id') and (ret.get('total_amount') or 0) > 0:
+        cursor.execute("UPDATE suppliers SET total_debt = total_debt + ? WHERE id=?",
+                       (ret['total_amount'], ret['supplier_id']))
+    cursor.execute("DELETE FROM purchase_return_items WHERE return_id=?", (return_id,))
+    cursor.execute("DELETE FROM purchase_returns WHERE id=?", (return_id,))
+    conn.commit()
+    conn.close()
+
+
+def update_purchase_return(return_id, supplier_id, supplier_name, items, total_amount,
+                            invoice_type, notes, date):
+    conn = get_connection()
+    cursor = conn.cursor()
+    old = cursor.execute("SELECT * FROM purchase_returns WHERE id=?", (return_id,)).fetchone()
+    if not old:
+        conn.close()
+        return
+    old = dict(old)
+    old_items = [dict(r) for r in cursor.execute(
+        "SELECT * FROM purchase_return_items WHERE return_id=?", (return_id,)
+    ).fetchall()]
+    # Reverse old items
+    for item in old_items:
+        if item.get('product_id'):
+            cursor.execute("UPDATE products SET quantity = quantity + ? WHERE id=?",
+                           (item['quantity'], item['product_id']))
+    if old.get('supplier_id') and (old.get('total_amount') or 0) > 0:
+        cursor.execute("UPDATE suppliers SET total_debt = total_debt + ? WHERE id=?",
+                       (old['total_amount'], old['supplier_id']))
+    cursor.execute("""
+        UPDATE purchase_returns SET supplier_id=?, supplier_name=?, total_amount=?,
+        invoice_type=?, notes=?, date=? WHERE id=?
+    """, (supplier_id, supplier_name, total_amount, invoice_type, notes, date, return_id))
+    cursor.execute("DELETE FROM purchase_return_items WHERE return_id=?", (return_id,))
+    for item in items:
+        cursor.execute(
+            "INSERT INTO purchase_return_items (return_id, product_id, product_name, quantity, unit_name, unit_price, total) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (return_id, item.get('product_id'), item['product_name'],
+             item['quantity'], item.get('unit_name', ''), item['unit_price'], item['total'])
+        )
+        if item.get('product_id'):
+            cursor.execute("UPDATE products SET quantity = MAX(0, quantity - ?) WHERE id=?",
+                           (item['quantity'], item['product_id']))
+    if supplier_id and total_amount > 0:
+        cursor.execute("UPDATE suppliers SET total_debt = MAX(0, total_debt - ?) WHERE id=?",
+                       (total_amount, supplier_id))
+    conn.commit()
+    conn.close()
+
+
+def delete_sale_return(return_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    ret = cursor.execute("SELECT * FROM sale_returns WHERE id=?", (return_id,)).fetchone()
+    if not ret:
+        conn.close()
+        return
+    ret = dict(ret)
+    items = [dict(r) for r in cursor.execute(
+        "SELECT * FROM sale_return_items WHERE return_id=?", (return_id,)
+    ).fetchall()]
+    # Reverse: sale return added inventory, so subtract it back
+    for item in items:
+        if item.get('product_id'):
+            cursor.execute("UPDATE products SET quantity = MAX(0, quantity - ?) WHERE id=?",
+                           (item['quantity'], item['product_id']))
+    if ret.get('customer_id') and (ret.get('total_amount') or 0) > 0:
+        cursor.execute("UPDATE customers SET total_debt = total_debt + ? WHERE id=?",
+                       (ret['total_amount'], ret['customer_id']))
+    cursor.execute("DELETE FROM sale_return_items WHERE return_id=?", (return_id,))
+    cursor.execute("DELETE FROM sale_returns WHERE id=?", (return_id,))
+    conn.commit()
+    conn.close()
+
+
+def update_sale_return(return_id, customer_id, customer_name, items, total_amount,
+                        invoice_type, notes, date):
+    conn = get_connection()
+    cursor = conn.cursor()
+    old = cursor.execute("SELECT * FROM sale_returns WHERE id=?", (return_id,)).fetchone()
+    if not old:
+        conn.close()
+        return
+    old = dict(old)
+    old_items = [dict(r) for r in cursor.execute(
+        "SELECT * FROM sale_return_items WHERE return_id=?", (return_id,)
+    ).fetchall()]
+    # Reverse old items
+    for item in old_items:
+        if item.get('product_id'):
+            cursor.execute("UPDATE products SET quantity = MAX(0, quantity - ?) WHERE id=?",
+                           (item['quantity'], item['product_id']))
+    if old.get('customer_id') and (old.get('total_amount') or 0) > 0:
+        cursor.execute("UPDATE customers SET total_debt = total_debt + ? WHERE id=?",
+                       (old['total_amount'], old['customer_id']))
+    cursor.execute("""
+        UPDATE sale_returns SET customer_id=?, customer_name=?, total_amount=?,
+        invoice_type=?, notes=?, date=? WHERE id=?
+    """, (customer_id, customer_name, total_amount, invoice_type, notes, date, return_id))
+    cursor.execute("DELETE FROM sale_return_items WHERE return_id=?", (return_id,))
+    for item in items:
+        cursor.execute(
+            "INSERT INTO sale_return_items (return_id, product_id, product_name, quantity, unit_name, unit_price, total) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (return_id, item.get('product_id'), item['product_name'],
+             item['quantity'], item.get('unit_name', ''), item['unit_price'], item['total'])
+        )
+        if item.get('product_id'):
+            cursor.execute("UPDATE products SET quantity = quantity + ? WHERE id=?",
+                           (item['quantity'], item['product_id']))
+    if customer_id and total_amount > 0:
+        cursor.execute("UPDATE customers SET total_debt = MAX(0, total_debt - ?) WHERE id=?",
+                       (total_amount, customer_id))
+    conn.commit()
+    conn.close()
+
+
 def get_all_payments_combined():
     conn = get_connection()
     cp = conn.execute("""
@@ -1014,6 +1156,113 @@ def apply_payment_to_purchase(purchase_id, amount):
     conn.close()
 
 
+def _reverse_purchase_items(cursor, items):
+    """Subtract item quantities from products and product_batches (most-recent batch first)."""
+    for item in items:
+        if not item.get('product_id'):
+            continue
+        cursor.execute(
+            "UPDATE products SET quantity = MAX(0, quantity - ?) WHERE id=?",
+            (item['quantity'], item['product_id'])
+        )
+        qty_left = item['quantity']
+        batches = cursor.execute(
+            "SELECT id, quantity FROM product_batches WHERE product_id=? AND quantity > 0 ORDER BY id DESC",
+            (item['product_id'],)
+        ).fetchall()
+        for batch in batches:
+            if qty_left <= 0:
+                break
+            take = min(batch['quantity'], qty_left)
+            cursor.execute("UPDATE product_batches SET quantity = quantity - ? WHERE id=?",
+                           (take, batch['id']))
+            qty_left -= take
+
+
+def delete_purchase(purchase_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    purchase = cursor.execute("SELECT * FROM purchases WHERE id=?", (purchase_id,)).fetchone()
+    if not purchase:
+        conn.close()
+        return
+    purchase = dict(purchase)
+    items = [dict(r) for r in cursor.execute(
+        "SELECT * FROM purchase_items WHERE purchase_id=?", (purchase_id,)
+    ).fetchall()]
+
+    _reverse_purchase_items(cursor, items)
+
+    remaining = max(0.0, (purchase.get('total_amount') or 0) - (purchase.get('paid_amount') or 0))
+    if purchase.get('supplier_id') and remaining > 0:
+        cursor.execute("UPDATE suppliers SET total_debt = MAX(0, total_debt - ?) WHERE id=?",
+                       (remaining, purchase['supplier_id']))
+
+    cursor.execute("DELETE FROM purchase_items WHERE purchase_id=?", (purchase_id,))
+    cursor.execute("DELETE FROM purchases WHERE id=?", (purchase_id,))
+    conn.commit()
+    conn.close()
+
+
+def update_purchase(purchase_id, supplier_id, supplier_name, items, total_amount,
+                    paid_amount, payment_type, notes, invoice_type, payment_due_date):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    old = cursor.execute("SELECT * FROM purchases WHERE id=?", (purchase_id,)).fetchone()
+    if not old:
+        conn.close()
+        return
+    old = dict(old)
+    old_items = [dict(r) for r in cursor.execute(
+        "SELECT * FROM purchase_items WHERE purchase_id=?", (purchase_id,)
+    ).fetchall()]
+
+    _reverse_purchase_items(cursor, old_items)
+
+    old_remaining = max(0.0, (old.get('total_amount') or 0) - (old.get('paid_amount') or 0))
+    if old.get('supplier_id') and old_remaining > 0:
+        cursor.execute("UPDATE suppliers SET total_debt = MAX(0, total_debt - ?) WHERE id=?",
+                       (old_remaining, old['supplier_id']))
+
+    cursor.execute("""
+        UPDATE purchases SET supplier_id=?, supplier=?, total_amount=?, paid_amount=?,
+        payment_type=?, invoice_type=?, notes=?, payment_due_date=?
+        WHERE id=?
+    """, (supplier_id, supplier_name, total_amount, paid_amount,
+          payment_type, invoice_type, notes, payment_due_date, purchase_id))
+
+    cursor.execute("DELETE FROM purchase_items WHERE purchase_id=?", (purchase_id,))
+
+    for item in items:
+        cursor.execute(
+            """INSERT INTO purchase_items (purchase_id, product_id, product_name, quantity, unit_name, unit_price, total)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (purchase_id, item['product_id'], item['product_name'],
+             item['quantity'], item.get('unit_name', ''), item['unit_price'], item['total'])
+        )
+        if item.get('product_id'):
+            cursor.execute(
+                "UPDATE products SET quantity = quantity + ?, purchase_price = ?, selling_price = ?, product_type = ? WHERE id=?",
+                (item['quantity'], item['unit_price'],
+                 item.get('selling_price') or item['unit_price'], invoice_type, item['product_id'])
+            )
+            cursor.execute(
+                """INSERT INTO product_batches (product_id, quantity, purchase_price, expiry_date)
+                   VALUES (?, ?, ?, ?)""",
+                (item['product_id'], item['quantity'], item['unit_price'],
+                 item.get('expiry_date') or None)
+            )
+
+    new_remaining = max(0.0, total_amount - paid_amount)
+    if supplier_id and new_remaining > 0:
+        cursor.execute("UPDATE suppliers SET total_debt = total_debt + ? WHERE id=?",
+                       (new_remaining, supplier_id))
+
+    conn.commit()
+    conn.close()
+
+
 def apply_payment_to_sale(sale_id, amount):
     """Update paid_amount and remaining on a specific sale invoice."""
     conn = get_connection()
@@ -1023,6 +1272,79 @@ def apply_payment_to_sale(sale_id, amount):
             remaining   = MAX(0, remaining - ?)
         WHERE id = ?
     """, (amount, amount, sale_id))
+    conn.commit()
+    conn.close()
+
+
+def delete_sale(sale_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    sale = cursor.execute("SELECT * FROM sales WHERE id=?", (sale_id,)).fetchone()
+    if not sale:
+        conn.close()
+        return
+    sale = dict(sale)
+    items = [dict(r) for r in cursor.execute(
+        "SELECT * FROM sale_items WHERE sale_id=?", (sale_id,)
+    ).fetchall()]
+    # Reverse: sale subtracted inventory, so add it back
+    for item in items:
+        if item.get('product_id'):
+            cursor.execute("UPDATE products SET quantity = quantity + ? WHERE id=?",
+                           (item['quantity'], item['product_id']))
+    remaining = max(0.0, (sale.get('total_amount') or 0) - (sale.get('paid_amount') or 0))
+    if sale.get('customer_id') and remaining > 0:
+        cursor.execute("UPDATE customers SET total_debt = MAX(0, total_debt - ?) WHERE id=?",
+                       (remaining, sale['customer_id']))
+    cursor.execute("DELETE FROM sale_items WHERE sale_id=?", (sale_id,))
+    cursor.execute("DELETE FROM sales WHERE id=?", (sale_id,))
+    conn.commit()
+    conn.close()
+
+
+def update_sale(sale_id, customer_id, customer_name, items, total_amount, paid_amount,
+                payment_type, notes, invoice_type, date):
+    conn = get_connection()
+    cursor = conn.cursor()
+    old = cursor.execute("SELECT * FROM sales WHERE id=?", (sale_id,)).fetchone()
+    if not old:
+        conn.close()
+        return
+    old = dict(old)
+    old_items = [dict(r) for r in cursor.execute(
+        "SELECT * FROM sale_items WHERE sale_id=?", (sale_id,)
+    ).fetchall()]
+    # Reverse old items: add back inventory
+    for item in old_items:
+        if item.get('product_id'):
+            cursor.execute("UPDATE products SET quantity = quantity + ? WHERE id=?",
+                           (item['quantity'], item['product_id']))
+    old_remaining = max(0.0, (old.get('total_amount') or 0) - (old.get('paid_amount') or 0))
+    if old.get('customer_id') and old_remaining > 0:
+        cursor.execute("UPDATE customers SET total_debt = MAX(0, total_debt - ?) WHERE id=?",
+                       (old_remaining, old['customer_id']))
+    new_remaining = max(0.0, total_amount - paid_amount)
+    cursor.execute("""
+        UPDATE sales SET customer_id=?, customer_name=?, total_amount=?, paid_amount=?,
+        remaining=?, payment_type=?, invoice_type=?, notes=?, date=?
+        WHERE id=?
+    """, (customer_id, customer_name, total_amount, paid_amount, new_remaining,
+          payment_type, invoice_type, notes, date, sale_id))
+    cursor.execute("DELETE FROM sale_items WHERE sale_id=?", (sale_id,))
+    for item in items:
+        cursor.execute(
+            """INSERT INTO sale_items (sale_id, product_id, product_name, quantity, unit_name, unit_price, total)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (sale_id, item['product_id'], item['product_name'],
+             item['quantity'], item.get('unit_name', ''), item['unit_price'], item['total'])
+        )
+        if item.get('product_id'):
+            cursor.execute("UPDATE products SET quantity = MAX(0, quantity - ?) WHERE id=?",
+                           (item['quantity'], item['product_id']))
+            _consume_batches(cursor, item['product_id'], item['quantity'])
+    if customer_id and new_remaining > 0:
+        cursor.execute("UPDATE customers SET total_debt = total_debt + ? WHERE id=?",
+                       (new_remaining, customer_id))
     conn.commit()
     conn.close()
 
