@@ -15,6 +15,8 @@ Mapping (Access -> pharmacy.db)
     Orders  (is_order=True)       -> purchases + purchase_items
     Orders  (is_order=False)      -> purchase_returns + purchase_return_items
     dof3at  (is_credit=1)         -> payments           (customer paid us)
+                                     or, for a supplier-only name, a negative supplier payment
+    dof3at  (is_credit=0) for a customer-only name -> a negative customer payment
     dof3at  (is_credit=0)         -> supplier_payments  (we paid supplier)
     users, expenses, cartoon_sizes, new, ~TMP* are not imported.
 
@@ -38,7 +40,9 @@ DRIVER = "Microsoft Access Driver (*.mdb, *.accdb)"
 CASH_NAME = "كاش"                 # Access uses this name for walk-in / cash parties
 DEFAULT_TYPE = "بيطري"
 NOTE = "مستورد من Access - فاتورة رقم {}"
-MARKER = "مستورد من Access%"
+RECEIVED_NOTE = "مبلغ مستلم من المورد (رصيد/استرداد) - مستورد من Access"
+CHARGED_NOTE = "مبلغ على العميل (رصيد سابق) - مستورد من Access"
+MARKER ="مستورد من Access%"
 
 
 def open_access(path: Path):
@@ -66,6 +70,10 @@ def _num(v):
 
 def _txt(v):
     return "" if v is None else " ".join(str(v).split())
+
+
+def _note(label, extra):
+    return f"{label} - {extra}" if extra else label
 
 
 def _day(v):
@@ -127,8 +135,10 @@ class Importer:
         return self.suppliers[name]
 
     def import_parties(self):
+        self.acc_customers, self.acc_suppliers = set(), set()   # names as listed in Access
         for name, phone, is_supplier, address in self.rows(
                 "SELECT name, phone, is_supplier, address FROM suppliers"):
+            (self.acc_suppliers if is_supplier else self.acc_customers).add(_txt(name))
             (self.supplier if is_supplier else self.customer)(name, _txt(phone), _txt(address))
 
     # ---- products ------------------------------------------------------
@@ -265,7 +275,24 @@ class Importer:
         for amount, person, pdate, is_credit, ezn in self.rows(
                 "SELECT dof3a, person_name, dof3a_date, is_credit, ezn_number FROM dof3at ORDER BY dof3a_date, ID"):
             amount, day, notes = _num(amount), _day(pdate), _txt(ezn)
-            if is_credit:       # customer paid us
+            name = _txt(person)
+            supplier_only = name in self.acc_suppliers and name not in self.acc_customers
+            customer_only = name in self.acc_customers and name not in self.acc_suppliers
+            # The "wrong" direction for a party's role (opening balance carried over, refund, ...)
+            # raises the balance instead; stored as a negative payment so statements include it.
+            if is_credit and supplier_only:     # money received from a supplier -> we owe him more
+                sid = self.supplier(name)
+                self.lite.execute("INSERT INTO supplier_payments (supplier_id, amount, date, notes) VALUES (?,?,?,?)",
+                                  (sid, -amount, day, _note(RECEIVED_NOTE, notes)))
+                self.supp_debt[sid] += amount
+                self.stats["supplier receipts (negative payments)"] += 1
+            elif not is_credit and customer_only:   # money given to a customer -> he owes us more
+                cid = self.customer(name)
+                self.lite.execute("INSERT INTO payments (customer_id, amount, date, notes) VALUES (?,?,?,?)",
+                                  (cid, -amount, day, _note(CHARGED_NOTE, notes)))
+                self.cust_debt[cid] += amount
+                self.stats["customer charges (negative payments)"] += 1
+            elif is_credit:     # customer paid us
                 cid = self.customer(person)
                 if cid is None:
                     self.stats["payments skipped (cash/blank name)"] += 1

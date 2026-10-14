@@ -358,7 +358,7 @@ class SupplierPdfRangeDialog(QDialog):
 
         self.date_from = QDateEdit()
         self.date_from.setCalendarPopup(True)
-        self.date_from.setDate(QDate.currentDate().addMonths(-1))
+        self.date_from.setDate(QDate(2000, 1, 1))     # same default as the supplier account screen
         self.date_from.setDisplayFormat("yyyy-MM-dd")
         style_calendar(self.date_from)
         form.addRow("من تاريخ:", self.date_from)

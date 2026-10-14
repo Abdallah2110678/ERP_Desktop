@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QGraphicsDropShadowEffect, QMessageBox, QMenu, QSpinBox,
     QToolButton, QAbstractItemView, QCalendarWidget,
-    QCompleter, QComboBox,
+    QCompleter, QComboBox, QListWidget, QListWidgetItem,
 )
 from PyQt6.QtGui import QColor, QPalette, QTextCharFormat
 from PyQt6.QtCore import Qt, QObject, QEvent, QDate, QLocale
@@ -273,6 +273,14 @@ _YEAR_MENU_CSS = (
     "QMenu::item:selected { background: #27ae60; color: white; }"
 )
 
+_YEAR_LIST_CSS = (
+    "QListWidget { color: #1a2535; background: white; font-family: Tahoma; font-size: 12px;"
+    " border: 1px solid #cdd5df; outline: 0; }"
+    "QListWidget::item { padding: 4px 10px; }"
+    "QListWidget::item:hover { background: #e8f5e9; }"
+    "QListWidget::item:selected { background: #27ae60; color: white; }"
+)
+
 
 def _make_nav_menu(parent):
     """Create a QMenu with an explicit light palette so Fusion dark theme doesn't make text white."""
@@ -313,19 +321,45 @@ class _NavFilter(QObject):
             return self._show_month_menu()
         return False
 
+    _YEAR_FIRST, _YEAR_LAST = 2010, 2060
+    _YEAR_VISIBLE_ROWS = 8
+
     def _show_year_menu(self):
+        """Short, scrollable year list (a QMenu can't be height-limited)."""
         cur  = self._cal.yearShown()
-        menu = _make_nav_menu(self._cal)
-        actions = {}
-        for yr in range(2020, 2061):
-            a = menu.addAction(str(yr))
+        lst  = QListWidget(self._cal)
+        lst.setWindowFlags(Qt.WindowType.Popup)
+        lst.setStyleSheet(_YEAR_LIST_CSS)
+        lst.setPalette(_make_nav_menu(self._cal).palette())
+        lst.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        lst.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        cur_item = None
+        for yr in range(self._YEAR_FIRST, self._YEAR_LAST + 1):
+            item = QListWidgetItem(str(yr))
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            item.setData(Qt.ItemDataRole.UserRole, yr)
             if yr == cur:
-                font = a.font(); font.setBold(True); a.setFont(font)
-            actions[a] = yr
-        pos    = self._year_btn.mapToGlobal(self._year_btn.rect().bottomLeft())
-        chosen = menu.exec(pos)
-        if chosen and chosen in actions:
-            self._cal.setCurrentPage(actions[chosen], self._cal.monthShown())
+                font = item.font(); font.setBold(True); item.setFont(font)
+                cur_item = item
+            lst.addItem(item)
+
+        row_h = lst.sizeHintForRow(0)
+        lst.setFixedSize(max(self._year_btn.width(), px(90)),
+                         row_h * self._YEAR_VISIBLE_ROWS + 2 * lst.frameWidth())
+
+        def _pick(item):
+            self._cal.setCurrentPage(item.data(Qt.ItemDataRole.UserRole),
+                                     self._cal.monthShown())
+            lst.close()
+        lst.itemClicked.connect(_pick)
+        lst.itemActivated.connect(_pick)
+
+        lst.move(self._year_btn.mapToGlobal(self._year_btn.rect().bottomLeft()))
+        lst.show()
+        if cur_item is not None:
+            lst.setCurrentItem(cur_item)
+            lst.scrollToItem(cur_item, QAbstractItemView.ScrollHint.PositionAtCenter)
+        self._year_popup = lst  # keep a reference while it's open
         return True
 
     def _show_month_menu(self):

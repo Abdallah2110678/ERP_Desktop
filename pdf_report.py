@@ -3,6 +3,7 @@ Arabic PDF report generator — optimised for black & white printing.
 Uses reportlab + arabic_reshaper + python-bidi for proper RTL rendering.
 """
 import os
+import re
 import tempfile
 from pathlib import Path
 from datetime import datetime
@@ -18,6 +19,11 @@ from bidi.algorithm import get_display
 
 import database as db
 from config import PHARMACY_NAME, PHARMACY_SUBTITLE
+
+
+def _safe(name, limit=40):
+    """A name usable inside a file name: Windows forbids \\ / : * ? " < > |."""
+    return re.sub(r'[\\/:*?"<>|\s]+', '_', str(name)).strip('_')[:limit]
 
 # ── Font registration ──────────────────────────────────────────────────────────
 _FONTS_DIR = Path("C:/Windows/Fonts")
@@ -344,16 +350,20 @@ def generate_customer_statement(customer_id: int, date_from: str, date_to: str) 
     payments = [dict(r) for r in conn.execute(
         "SELECT * FROM payments WHERE customer_id=? AND date BETWEEN ? AND ? ORDER BY date",
         (customer_id, date_from, date_to)).fetchall()]
+    returns = [dict(r) for r in conn.execute(
+        "SELECT * FROM sale_returns WHERE customer_id=? AND date BETWEEN ? AND ? ORDER BY date",
+        (customer_id, date_from, date_to)).fetchall()]
     conn.close()
 
     total_sales    = sum(s['total_amount'] for s in sales)
     total_paid     = sum(s['paid_amount']  for s in sales)
+    total_returns  = sum(r['total_amount'] for r in returns)
     total_payments = sum(p['amount']       for p in payments)
-    remaining_debt = max(0.0, total_sales - total_paid - total_payments)
+    remaining_debt = max(0.0, total_sales - total_paid - total_returns - total_payments)
 
     tmp = tempfile.NamedTemporaryFile(
         suffix=".pdf",
-        prefix=f"statement_{customer['name'].replace(' ', '_')}_",
+        prefix=f"statement_{_safe(customer['name'])}_",
         delete=False)
     tmp.close()
     c = rl_canvas.Canvas(tmp.name, pagesize=A4)
@@ -372,23 +382,23 @@ def generate_customer_statement(customer_id: int, date_from: str, date_to: str) 
     _ltext(c, f"الرصيد الكلي :  {remaining_debt:.2f} ج.م", ML + 8, y - 14, "ArBold", 11)
     y -= box_h + 16
 
-    # Sales — one invoice block per sale
+    # Sales — every line of every bill in one table
     if sales:
-        _rtext(c, "فواتير البيع", MR, y, "ArBold", 12)
+        _rtext(c, "المبيعات", MR, y, "ArBold", 12)
         y -= 8;  _hline(c, y, width=0.8);  y -= 10
-
-        for s in sales:
-            y = _maybe_new_page(c, y, 120, "كشف حساب عميل")
-            sale_items = db.get_sale_items(s['id'])
-            y = _draw_invoice_block(c, y, s['date'], sale_items,
-                                    s['total_amount'], s['paid_amount'],
-                                    s['remaining'], s['payment_type'],
-                                    "كشف حساب عميل")
-
-        _rtext(c,
-               f"اجمالي الفواتير: {total_sales:.2f}    |    اجمالي المدفوع: {total_paid:.2f}  ج.م",
-               MR, y, "ArBold", 10)
+        rows = [(s['date'], it) for s in sales for it in db.get_sale_items(s['id'])]
+        y = _draw_type_block(c, y, rows, "اجمالي المبيعات", total_sales, "كشف حساب عميل")
+        _rtext(c, f"اجمالي المدفوع على الفواتير: {total_paid:.2f}  ج.م", MR, y, "ArBold", 10)
         y -= 22
+
+    # Returns — every line of every return in one table
+    if returns:
+        y = _maybe_new_page(c, y, 120, "كشف حساب عميل")
+        _rtext(c, "المرتجعات", MR, y, "ArBold", 12)
+        y -= 8;  _hline(c, y, width=0.8);  y -= 10
+        rows = [(r['date'], it) for r in returns for it in db.get_sale_return_items(r['id'])]
+        y = _draw_type_block(c, y, rows, "اجمالي المرتجعات", total_returns, "كشف حساب عميل")
+        y -= 14
 
     # Payments table
     if payments:
@@ -416,20 +426,27 @@ def generate_customer_statement(customer_id: int, date_from: str, date_to: str) 
         y -= 22
 
     # Summary box
-    y = _maybe_new_page(c, y, 145, "كشف حساب عميل")
+    y = _maybe_new_page(c, y, 160, "كشف حساب عميل")
     y -= 8;  _hline(c, y, width=1.2);  y -= 14
 
-    sum_h = 68
+    lines = [
+        ("اجمالي الفواتير في الفترة", total_sales),
+        ("المدفوع على الفواتير", total_paid),
+        ("اجمالي المرتجعات في الفترة", total_returns),
+        ("اجمالي المدفوعات في الفترة", total_payments),
+    ]
+    sum_h = 36 + 16 * len(lines)
     c.setFillColor(LIGHT_GRAY);  c.setStrokeColor(DARK_GRAY);  c.setLineWidth(0.8)
     c.rect(ML, y - sum_h, TW, sum_h, fill=1, stroke=1)
     c.setFillColor(BLACK)
     _ctext(c, "ملخص الحساب", W / 2, y - 14, "ArBold", 13)
-    _rtext(c, f"اجمالي الفواتير في الفترة :             {total_sales:.2f} ج.م",
-           MR - 10, y - 30, "Ar", 10.5)
-    _rtext(c, f"اجمالي المدفوعات في الفترة :           {total_payments:.2f} ج.م",
-           MR - 10, y - 46, "Ar", 10.5)
-    _rtext(c, f"الرصيد الكلي المتبقي على العميل :   {remaining_debt:.2f} ج.م",
-           MR - 10, y - 62, "ArBold", 11)
+    ly = y - 30
+    for label, value in lines:
+        _rtext(c, f"{label} :", MR - 10, ly, "Ar", 10.5)
+        _ltext(c, f"{value:.2f} ج.م", ML + 10, ly, "Ar", 10.5)
+        ly -= 16
+    _rtext(c, "الرصيد الكلي المتبقي على العميل :", MR - 10, ly, "ArBold", 11)
+    _ltext(c, f"{remaining_debt:.2f} ج.م", ML + 10, ly, "ArBold", 11)
 
     c.setFont("Ar", 8);  c.setFillColor(MID_GRAY)
     c.drawString(ML + 4, y - sum_h - 12,
@@ -468,7 +485,7 @@ def generate_customer_account(customer_id: int, date_from: str, date_to: str) ->
 
     tmp = tempfile.NamedTemporaryFile(
         suffix=".pdf",
-        prefix=f"account_{customer['name'].replace(' ', '_')}_",
+        prefix=f"account_{_safe(customer['name'])}_",
         delete=False)
     tmp.close()
     c = rl_canvas.Canvas(tmp.name, pagesize=A4)
@@ -719,12 +736,17 @@ def generate_supplier_statement(supplier_id: int, date_from: str, date_to: str) 
     payments = [dict(r) for r in conn.execute(
         "SELECT * FROM supplier_payments WHERE supplier_id=? AND date BETWEEN ? AND ? ORDER BY date",
         (supplier_id, date_from, date_to)).fetchall()]
+    returns = [dict(r) for r in conn.execute(
+        "SELECT * FROM purchase_returns WHERE supplier_id=? AND date BETWEEN ? AND ? ORDER BY date",
+        (supplier_id, date_from, date_to)).fetchall()]
     conn.close()
 
-    total_purchases  = sum(p['total_amount'] for p in purchases)
-    total_paid_inv   = sum(p.get('paid_amount') or 0 for p in purchases)
-    total_payments   = sum(p['amount'] for p in payments)
-    remaining_debt   = max(0.0, total_purchases - total_paid_inv - total_payments)
+    bal = db.get_supplier_balance(supplier_id, date_from, date_to)
+    total_purchases  = bal['purchases']
+    total_paid_inv   = bal['paid_on_invoices']
+    total_returns    = bal['returns']
+    total_payments   = bal['payments']
+    remaining_debt   = bal['closing']
 
     from datetime import date as _date, timedelta as _td
     today_str = _date.today().isoformat()
@@ -740,7 +762,7 @@ def generate_supplier_statement(supplier_id: int, date_from: str, date_to: str) 
 
     tmp = tempfile.NamedTemporaryFile(
         suffix=".pdf",
-        prefix=f"supplier_{supplier['name'].replace(' ', '_')}_",
+        prefix=f"supplier_{_safe(supplier['name'])}_",
         delete=False)
     tmp.close()
     c = rl_canvas.Canvas(tmp.name, pagesize=A4)
@@ -756,35 +778,26 @@ def generate_supplier_statement(supplier_id: int, date_from: str, date_to: str) 
     c.setFillColor(BLACK)
     _rtext(c, f"الاسم :  {supplier['name']}",               MR - 8, y - 14, "ArBold", 11)
     _rtext(c, f"الهاتف :  {supplier.get('phone') or '—'}",  MR - 8, y - 30, "Ar",     10)
-    _ltext(c, f"المستحق في الفترة :  {remaining_debt:.2f} ج.م", ML + 8, y - 14, "ArBold", 11)
+    _ltext(c, f"الرصيد المستحق :  {remaining_debt:.2f} ج.م", ML + 8, y - 14, "ArBold", 11)
     y -= box_h + 16
 
-    # Purchases — one invoice block per purchase
+    # Purchases — every line of every bill in one table
     if purchases:
-        _rtext(c, "فواتير الشراء", MR, y, "ArBold", 12)
+        _rtext(c, "المشتريات", MR, y, "ArBold", 12)
         y -= 8;  _hline(c, y, width=0.8);  y -= 10
-
-        for p in purchases:
-            y = _maybe_new_page(c, y, 120, "كشف حساب مورد")
-            paid_amt = p.get('paid_amount') or 0
-            rem = max(0.0, p['total_amount'] - paid_amt)
-            purchase_items = db.get_purchase_items(p['id'])
-            y = _draw_invoice_block(c, y, p['date'], purchase_items,
-                                    p['total_amount'], paid_amt, rem,
-                                    p.get('payment_type', 'cash'),
-                                    "كشف حساب مورد")
-            if p.get('payment_due_date') and rem > 0:
-                due = p['payment_due_date']
-                label = f"  تاريخ السداد: {due}"
-                if due < today_str:
-                    label += "  *** متأخر ***"
-                _rtext(c, label, MR, y, "ArBold", 9)
-                y -= 14
-
-        _rtext(c,
-               f"اجمالي الفواتير: {total_purchases:.2f}    |    اجمالي المدفوع: {total_paid_inv:.2f}  ج.م",
-               MR, y, "ArBold", 10)
+        rows = [(p['date'], it) for p in purchases for it in db.get_purchase_items(p['id'])]
+        y = _draw_type_block(c, y, rows, "اجمالي المشتريات", total_purchases, "كشف حساب مورد")
+        _rtext(c, f"اجمالي المدفوع على الفواتير: {total_paid_inv:.2f}  ج.م", MR, y, "ArBold", 10)
         y -= 22
+
+    # Returns — every line of every return in one table
+    if returns:
+        y = _maybe_new_page(c, y, 120, "كشف حساب مورد")
+        _rtext(c, "المرتجعات", MR, y, "ArBold", 12)
+        y -= 8;  _hline(c, y, width=0.8);  y -= 10
+        rows = [(r['date'], it) for r in returns for it in db.get_purchase_return_items(r['id'])]
+        y = _draw_type_block(c, y, rows, "اجمالي المرتجعات", total_returns, "كشف حساب مورد")
+        y -= 14
 
     # Due payments section
     if due_invoices:
@@ -841,23 +854,32 @@ def generate_supplier_statement(supplier_id: int, date_from: str, date_to: str) 
         y -= 22
 
     # Summary box
-    y = _maybe_new_page(c, y, 145, "كشف حساب مورد")
+    y = _maybe_new_page(c, y, 175, "كشف حساب مورد")
     y -= 8;  _hline(c, y, width=1.2);  y -= 14
 
-    sum_h = 84 if due_invoices else 68
+    lines = [
+        ("رصيد سابق (قبل الفترة)", bal['opening']),
+        ("اجمالي فواتير الشراء في الفترة", total_purchases),
+        ("المدفوع على الفواتير", total_paid_inv),
+        ("اجمالي المرتجعات في الفترة", total_returns),
+        ("اجمالي المدفوعات في الفترة", total_payments),
+    ]
+    sum_h = 36 + 16 * len(lines) + (16 if due_invoices else 0)
     c.setFillColor(LIGHT_GRAY);  c.setStrokeColor(DARK_GRAY);  c.setLineWidth(0.8)
     c.rect(ML, y - sum_h, TW, sum_h, fill=1, stroke=1)
     c.setFillColor(BLACK)
     _ctext(c, "ملخص حساب المورد", W / 2, y - 14, "ArBold", 13)
-    _rtext(c, f"اجمالي فواتير الشراء في الفترة :     {total_purchases:.2f} ج.م",
-           MR - 10, y - 30, "Ar", 10.5)
-    _rtext(c, f"اجمالي المدفوعات في الفترة :           {total_payments:.2f} ج.م",
-           MR - 10, y - 46, "Ar", 10.5)
-    _rtext(c, f"المستحق الكلي للمورد :                    {remaining_debt:.2f} ج.م",
-           MR - 10, y - 62, "ArBold", 11)
+    ly = y - 30
+    for label, value in lines:
+        _rtext(c, f"{label} :", MR - 10, ly, "Ar", 10.5)
+        _ltext(c, f"{value:.2f} ج.م", ML + 10, ly, "Ar", 10.5)
+        ly -= 16
+    _rtext(c, "المستحق الكلي للمورد :", MR - 10, ly, "ArBold", 11)
+    _ltext(c, f"{remaining_debt:.2f} ج.م", ML + 10, ly, "ArBold", 11)
     if due_invoices:
-        _rtext(c, f"اجمالي المبالغ المستحقة بتواريخ السداد :  {total_due_amount:.2f} ج.م",
-               MR - 10, y - 78, "ArBold", 11)
+        ly -= 16
+        _rtext(c, "اجمالي المبالغ المستحقة بتواريخ السداد :", MR - 10, ly, "ArBold", 11)
+        _ltext(c, f"{total_due_amount:.2f} ج.م", ML + 10, ly, "ArBold", 11)
 
     c.setFont("Ar", 8);  c.setFillColor(MID_GRAY)
     c.drawString(ML + 4, y - sum_h - 12,
@@ -896,7 +918,7 @@ def generate_product_report(product_id: int, date_from: str, date_to: str) -> st
     total_pr_qty     = sum(r['quantity'] for r in purchase_returns)
     net_profit       = total_sales_rev - (total_sales_qty * product['purchase_price'])
 
-    safe_name = product['name'].replace(' ', '_')[:20]
+    safe_name = _safe(product['name'], 20)
     tmp = tempfile.NamedTemporaryFile(
         suffix=".pdf", prefix=f"product_{safe_name}_", delete=False)
     tmp.close()

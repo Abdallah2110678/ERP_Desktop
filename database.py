@@ -1026,6 +1026,39 @@ def get_supplier_account(supplier_id, date_from, date_to):
     }
 
 
+def get_supplier_balance(supplier_id, date_from, date_to):
+    """Totals for a period plus the balance carried in from before it.
+
+    The one formula used by the account screen and the PDF statement:
+        balance = purchases - paid on the invoices - returns - payments
+    so `closing` for a period that covers everything equals suppliers.total_debt.
+    """
+    conn = get_connection()
+
+    def parts(where, args):
+        return conn.execute(f"""
+            SELECT
+              (SELECT COALESCE(SUM(total_amount), 0) FROM purchases
+                WHERE supplier_id=? AND {where}),
+              (SELECT COALESCE(SUM(MIN(COALESCE(paid_amount, 0), total_amount)), 0) FROM purchases
+                WHERE supplier_id=? AND {where}),
+              (SELECT COALESCE(SUM(total_amount), 0) FROM purchase_returns
+                WHERE supplier_id=? AND {where}),
+              (SELECT COALESCE(SUM(amount), 0) FROM supplier_payments
+                WHERE supplier_id=? AND {where})
+        """, (supplier_id, *args) * 4).fetchone()
+
+    before = parts("date < ?", (date_from,))
+    purchases, paid_inv, returns, payments = parts("date BETWEEN ? AND ?", (date_from, date_to))
+    conn.close()
+    opening = before[0] - before[1] - before[2] - before[3]
+    closing = opening + purchases - paid_inv - returns - payments
+    return {
+        'opening': opening, 'purchases': purchases, 'paid_on_invoices': paid_inv,
+        'returns': returns, 'payments': payments, 'closing': max(0.0, closing),
+    }
+
+
 def create_purchase(supplier_id, supplier_name, items, total_amount, paid_amount, payment_type, notes, invoice_type='بيطري', payment_due_date=None):
     remaining = max(0.0, total_amount - paid_amount)
     conn = get_connection()

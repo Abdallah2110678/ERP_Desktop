@@ -219,6 +219,7 @@ class SupplierAccountPage(QWidget):
             setattr(self, attr_name, val)
             sl.addLayout(row)
 
+        _sum_row("رصيد سابق (قبل الفترة)", C_TEXT_MED, 'sum_opening_lbl')
         _sum_row("إجمالي المشتريات", C_TEAL, 'sum_purchases_lbl')
         _sum_row("إجمالي المرتجعات", C_DANGER, 'sum_returns_lbl')
         _sum_row("إجمالي المدفوع", C_PRIMARY, 'sum_paid_lbl')
@@ -324,14 +325,14 @@ class SupplierAccountPage(QWidget):
             self.payments_table.setRowHeight(row, 36)
 
         # Totals
-        total_purchases = sum(p['total_amount'] for p in purchases)
-        total_returns = sum(r['total_amount'] for r in returns)
-        total_paid_payments = sum(p['amount'] for p in payments)
-        owed = max(0.0, total_purchases - total_returns - total_paid_payments)
+        # paid = paid on the invoices themselves + separate payments
+        bal = db.get_supplier_balance(sid, date_from, date_to)
+        owed = bal['closing']
 
-        self.sum_purchases_lbl.setText(f"{total_purchases:.2f} ج.م")
-        self.sum_returns_lbl.setText(f"{total_returns:.2f} ج.م")
-        self.sum_paid_lbl.setText(f"{total_paid_payments:.2f} ج.م")
+        self.sum_opening_lbl.setText(f"{bal['opening']:.2f} ج.م")
+        self.sum_purchases_lbl.setText(f"{bal['purchases']:.2f} ج.م")
+        self.sum_returns_lbl.setText(f"{bal['returns']:.2f} ج.م")
+        self.sum_paid_lbl.setText(f"{bal['paid_on_invoices'] + bal['payments']:.2f} ج.م")
         self.sum_owed_lbl.setText(f"{owed:.2f} ج.م")
         self.sum_owed_lbl.setStyleSheet(
             f"color: {C_DANGER if owed > 0 else C_PRIMARY}; background: transparent; font-size: 12px; font-weight: bold;"
