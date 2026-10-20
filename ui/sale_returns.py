@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QDialog, QLineEdit,
     QDoubleSpinBox, QHeaderView, QComboBox, QFrame, QDateEdit,
 )
-from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtCore import Qt, QDate, QTimer
 from PyQt6.QtGui import QColor, QFont
 import database as db
 from ui.styles import (
@@ -73,6 +73,8 @@ class NewSaleReturnDialog(QDialog):
         self.customer_combo.setMinimumWidth(280)
         self.customer_combo.setStyleSheet(INPUT_STYLE)
         setup_searchable_combo(self.customer_combo)
+        self.customer_combo.activated.connect(self._focus_product)
+        self.customer_combo.completer().activated.connect(self._focus_product)
         self.customer_combo.lineEdit().setPlaceholderText("ابحث باسم العميل...")
         cust_row.addWidget(self.customer_combo)
         cust_row.addWidget(QLabel("العميل:"))
@@ -116,6 +118,8 @@ class NewSaleReturnDialog(QDialog):
         self.product_combo.lineEdit().setPlaceholderText("اكتب اسم الصنف...")
         self.product_combo.currentIndexChanged.connect(self._on_product_changed)
         setup_searchable_combo(self.product_combo)
+        self.product_combo.activated.connect(self._focus_qty)
+        self.product_combo.completer().activated.connect(self._focus_qty)
 
         self.unit_input = QLineEdit()
         self.unit_input.setFixedWidth(110)
@@ -137,9 +141,10 @@ class NewSaleReturnDialog(QDialog):
         row2 = QHBoxLayout()
         row2.setSpacing(8)
         self.qty_spin = QDoubleSpinBox()
-        self.qty_spin.setRange(0.01, 999999)
+        self.qty_spin.setRange(0, 999999)
+        self.qty_spin.setSpecialValueText(' ')  # 0 shows as an empty box
         self.qty_spin.setDecimals(2)
-        self.qty_spin.setValue(1)
+        self.qty_spin.setValue(0)
         self.qty_spin.setFixedWidth(100)
         self.qty_spin.setStyleSheet(INPUT_STYLE)
 
@@ -280,6 +285,24 @@ class NewSaleReturnDialog(QDialog):
             self.stock_label.setText(f"المتاح: {p['quantity']:.2f} {p['unit']}")
             self.inv_type_combo.setCurrentText(p.get('product_type') or 'بيطري')
 
+    def _focus_product(self, *_):
+        QTimer.singleShot(0, self.product_combo.setFocus)
+
+    def _focus_qty(self, *_):
+        # Deferred so the combo finishes applying the picked item before focus moves
+        QTimer.singleShot(0, lambda: (self.qty_spin.setFocus(), self.qty_spin.selectAll()))
+
+    def _reset_product_inputs(self):
+        self.product_combo.blockSignals(True)
+        self.product_combo.setCurrentIndex(-1)
+        self.product_combo.clearEditText()
+        self.product_combo.blockSignals(False)
+        self.unit_input.clear()
+        self.qty_spin.setValue(0)
+        self.price_spin.setValue(0)
+        self.stock_label.clear()
+        self.product_combo.setFocus()
+
     def _add_item(self):
         idx = self.product_combo.currentIndex()
         typed_name = self.product_combo.currentText().strip()
@@ -310,6 +333,7 @@ class NewSaleReturnDialog(QDialog):
                 item['total'] = round(item['quantity'] * price, 2)
                 self._refresh_table()
                 self._update_total()
+                self._reset_product_inputs()
                 return
 
         self.cart.append({
@@ -322,6 +346,7 @@ class NewSaleReturnDialog(QDialog):
         })
         self._refresh_table()
         self._update_total()
+        self._reset_product_inputs()
 
     def _refresh_table(self):
         self.items_table.setRowCount(len(self.cart))

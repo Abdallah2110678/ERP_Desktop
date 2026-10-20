@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QDialog, QLineEdit,
     QDoubleSpinBox, QHeaderView, QComboBox, QFrame, QDateEdit,
 )
-from PyQt6.QtCore import Qt, QDate, QLocale
+from PyQt6.QtCore import Qt, QDate, QLocale, QTimer
 from PyQt6.QtGui import QColor, QFont
 import database as db
 import pdf_report
@@ -74,6 +74,8 @@ class NewPurchaseDialog(QDialog):
         self.supplier_combo.setStyleSheet(INPUT_STYLE)
         self.supplier_combo.lineEdit().setPlaceholderText("اختر مورداً أو اكتب اسماً جديداً...")
         setup_searchable_combo(self.supplier_combo)
+        self.supplier_combo.activated.connect(self._focus_product)
+        self.supplier_combo.completer().activated.connect(self._focus_product)
         sup_row.addWidget(self.supplier_combo)
         sup_row.addWidget(QLabel("المورد:"))
         sup_row.addSpacing(20)
@@ -97,6 +99,18 @@ class NewPurchaseDialog(QDialog):
         self.inv_type_combo.setFixedWidth(110)
         sup_row.addWidget(self.inv_type_combo)
         sup_row.addWidget(inv_type_lbl)
+        sup_row.addSpacing(12)
+
+        date_lbl = QLabel("التاريخ:")
+        self.purchase_date = QDateEdit()
+        self.purchase_date.setCalendarPopup(True)
+        self.purchase_date.setDate(QDate.currentDate())
+        self.purchase_date.setDisplayFormat("yyyy-MM-dd")
+        self.purchase_date.setStyleSheet(INPUT_STYLE)
+        self.purchase_date.setFixedWidth(150)
+        style_calendar(self.purchase_date)
+        sup_row.addWidget(self.purchase_date)
+        sup_row.addWidget(date_lbl)
         sup_row.addSpacing(20)
 
         self.paid_lbl = QLabel("المدفوع:")
@@ -169,6 +183,8 @@ class NewPurchaseDialog(QDialog):
         self.product_combo.lineEdit().setPlaceholderText("اكتب اسم الدواء أو اختره من القائمة...")
         self.product_combo.currentIndexChanged.connect(self._on_product_changed)
         setup_searchable_combo(self.product_combo)
+        self.product_combo.activated.connect(self._focus_qty)
+        self.product_combo.completer().activated.connect(self._focus_qty)
 
         self.unit_input = QLineEdit()
         self.unit_input.setFixedWidth(110)
@@ -246,9 +262,10 @@ class NewPurchaseDialog(QDialog):
         row2.setSpacing(8)
 
         self.qty_spin = QDoubleSpinBox()
-        self.qty_spin.setRange(0.01, 999999)
+        self.qty_spin.setRange(0, 999999)
+        self.qty_spin.setSpecialValueText(' ')  # 0 shows as an empty box
         self.qty_spin.setDecimals(2)
-        self.qty_spin.setValue(1)
+        self.qty_spin.setValue(0)
         self.qty_spin.setFixedWidth(100)
         self.qty_spin.setStyleSheet(INPUT_STYLE)
 
@@ -382,6 +399,9 @@ class NewPurchaseDialog(QDialog):
         if p.get('payment_due_date'):
             self.due_date_edit.setDate(QDate.fromString(p['payment_due_date'], "yyyy-MM-dd"))
 
+        if p.get('date'):
+            self.purchase_date.setDate(QDate.fromString(p['date'][:10], "yyyy-MM-dd"))
+
         self.notes_input.setText(p.get('notes', '') or '')
 
         product_map = {prod['id']: prod for prod in self.products_data}
@@ -419,6 +439,26 @@ class NewPurchaseDialog(QDialog):
                 self.price_spin.setValue(p['purchase_price'])
                 self.selling_price_spin.setValue(p['selling_price'])
                 self.inv_type_combo.setCurrentText(p.get('product_type') or 'بيطري')
+
+    def _focus_product(self, *_):
+        QTimer.singleShot(0, self.product_combo.setFocus)
+
+    def _focus_qty(self, *_):
+        # Deferred so the combo finishes applying the picked item before focus moves
+        QTimer.singleShot(0, lambda: (self.qty_spin.setFocus(), self.qty_spin.selectAll()))
+
+    def _reset_product_inputs(self):
+        self.product_combo.blockSignals(True)
+        self.product_combo.setCurrentIndex(-1)
+        self.product_combo.clearEditText()
+        self.product_combo.blockSignals(False)
+        self.unit_input.clear()
+        self.qty_spin.setValue(0)
+        self.price_spin.setValue(0)
+        self.selling_price_spin.setValue(0)
+        self.has_expiry_cb.setChecked(False)
+        self.expiry_edit.setDate(QDate.currentDate().addYears(1))
+        self.product_combo.setFocus()
 
     def _add_item(self):
         idx           = self.product_combo.currentIndex()
@@ -461,8 +501,11 @@ class NewPurchaseDialog(QDialog):
             'total':         round(qty * price, 2),
             'expiry_date':   expiry_date,
             'is_new':        product_id is None,
+            # Type chosen when this line was added (used only when creating a new product)
+            'product_type':  self.inv_type_combo.currentText(),
         })
         self._refresh_table(); self._update_total()
+        self._reset_product_inputs()
 
     def _refresh_table(self):
         self.items_table.setRowCount(len(self.cart))
@@ -522,7 +565,7 @@ class NewPurchaseDialog(QDialog):
                     0,
                     item['unit_price'],
                     item['selling_price'],
-                    inv_type,
+                    item.get('product_type') or inv_type,
                 )
                 item['product_id'] = new_id
                 item['is_new']     = False
@@ -555,17 +598,20 @@ class NewPurchaseDialog(QDialog):
             supplier_name = typed
             supplier_id   = db.add_supplier(typed, '', '')
 
+        _d = self.purchase_date.date()
+        purchase_date = f"{_d.year()}-{_d.month():02d}-{_d.day():02d}"
+
         if self._edit_purchase:
             db.update_purchase(
                 self._edit_purchase['id'],
                 supplier_id, supplier_name, self.cart, total, paid_amount,
-                pay_type, notes, inv_type, payment_due_date,
+                pay_type, notes, inv_type, payment_due_date, purchase_date,
             )
             show_info(self, "تم بنجاح",
                 f"✓  تم تعديل فاتورة الشراء # {self._edit_purchase['id']} بنجاح\n"
                 f"الإجمالي: {total:.2f} ج.م")
         else:
-            purchase_id = db.create_purchase(supplier_id, supplier_name, self.cart, total, paid_amount, pay_type, notes, inv_type, payment_due_date)
+            purchase_id = db.create_purchase(supplier_id, supplier_name, self.cart, total, paid_amount, pay_type, notes, inv_type, payment_due_date, date=purchase_date)
             show_info(self, "تم بنجاح",
                 f"✓  تم تسجيل فاتورة الشراء بنجاح\n"
                 f"رقم الفاتورة: {purchase_id}\n"

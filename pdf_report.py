@@ -198,6 +198,25 @@ def _maybe_new_page(c, y, threshold, footer_label, hdr_fn=None):
 
 PAY_MAP_AR = {'cash': 'نقدي', 'credit': 'آجل', 'partial': 'جزئي'}
 
+PRODUCT_TYPES = ("بيطري", "أعلاف", "نثريات")
+
+
+def _group_by_type(products):
+    """[(type_name, [products...]), ...] — known types first in fixed order, then any others; empty groups dropped."""
+    groups = {}
+    for p in products:
+        groups.setdefault(p.get('product_type') or "بيطري", []).append(p)
+    order = list(PRODUCT_TYPES) + sorted(t for t in groups if t not in PRODUCT_TYPES)
+    return [(t, groups[t]) for t in order if t in groups]
+
+
+def _draw_type_title(c, y, title, footer_label):
+    """Section heading above a product-type table (same look as the customer-account sections)."""
+    y = _maybe_new_page(c, y, 120, footer_label)
+    _rtext(c, title, MR, y, "ArBold", 11)
+    y -= 6;  _hline(c, y, width=0.7)
+    return y - 10
+
 
 def _draw_return_block(c, y, ret_date, items, total_amount, footer_label):
     """Draw one return block: items table with date column → total footer."""
@@ -301,7 +320,7 @@ def _draw_invoice_block(c, y, inv_date, items, total_amount, paid_amount,
                 (f"{it['unit_price']:.2f}",           "c"),
                 (f"{it['quantity']:.2f}",             "c"),
                 (str(it.get('unit_name', '') or ''),  "c"),
-                (str(inv_date),                       "c"),
+                (str(it.get('item_date') or inv_date), "c"),
                 (str(it.get('product_name', '')),     "r"),
             ]
             _draw_row(c, y, row, ICX, ICW, shaded=(i % 2 == 0), size=9)
@@ -471,12 +490,22 @@ def generate_customer_account(customer_id: int, date_from: str, date_to: str) ->
     returns  = data['returns']
     payments = data['payments']
 
-    vet_sales     = [s for s in sales   if s.get('invoice_type', 'بيطري') == 'بيطري']
-    feed_sales    = [s for s in sales   if s.get('invoice_type', 'بيطري') == 'أعلاف']
-    other_sales   = [s for s in sales   if s.get('invoice_type', 'بيطري') in ('نثريات', 'أخرى')]
-    vet_returns   = [r for r in returns if r.get('invoice_type', 'بيطري') == 'بيطري']
-    feed_returns  = [r for r in returns if r.get('invoice_type', 'بيطري') == 'أعلاف']
-    other_returns = [r for r in returns if r.get('invoice_type', 'بيطري') in ('نثريات', 'أخرى')]
+    # Lines are grouped by each product's own type (one bill can mix بيطري and أعلاف items);
+    # the bill's invoice_type is only a fallback for products that no longer exist.
+    product_types = {p['id']: p.get('product_type') for p in db.get_all_products()}
+
+    def _lines_by_type(docs, get_items):
+        groups = {t: [] for t in PRODUCT_TYPES}
+        for d in docs:
+            for it in get_items(d['id']):
+                t = product_types.get(it.get('product_id')) or d.get('invoice_type') or 'بيطري'
+                t = 'نثريات' if t == 'أخرى' else t
+                groups.setdefault(t, []).append((it.get('item_date') or d['date'], it))
+        # Newest first by each line's own date (a bill can hold lines from several days);
+        # the sort is stable, so same-day lines keep their bill order.
+        for rows in groups.values():
+            rows.sort(key=lambda r: r[0], reverse=True)
+        return groups
 
     total_sales    = sum(s['total_amount'] for s in sales)
     total_returns  = sum(r['total_amount'] for r in returns)
@@ -503,25 +532,24 @@ def generate_customer_account(customer_id: int, date_from: str, date_to: str) ->
     _ltext(c, f"المستحق في الفترة :  {owed:.2f} ج.م", ML + 8, y - 14, "ArBold", 11)
     y -= box_h + 14
 
-    def _section(title, docs, get_items, total_label):
-        """One table per product type: every line of every bill together, one total."""
+    def _section(title, rows, total_label):
+        """One table per product type: every matching line of every bill together, one total."""
         nonlocal y
-        if not docs:
+        if not rows:
             return
         y = _maybe_new_page(c, y, 120, "كشف حساب العميل")
         _rtext(c, title, MR, y, "ArBold", 11)
         y -= 6;  _hline(c, y, width=0.7);  y -= 10
-        rows = [(d['date'], it) for d in docs for it in get_items(d['id'])]
         y = _draw_type_block(c, y, rows, total_label,
-                             sum(d['total_amount'] for d in docs), "كشف حساب العميل")
+                             sum(it['total'] for _, it in rows), "كشف حساب العميل")
         y -= 6
 
     for kind, docs, get_items, total_label in (
-        ("مبيعات", (vet_sales, feed_sales, other_sales), db.get_sale_items, "اجمالي المبيعات"),
-        ("مرتجعات", (vet_returns, feed_returns, other_returns), db.get_sale_return_items, "اجمالي المرتجعات"),
+        ("مبيعات", sales, db.get_sale_items, "اجمالي المبيعات"),
+        ("مرتجعات", returns, db.get_sale_return_items, "اجمالي المرتجعات"),
     ):
-        for type_name, group in zip(("بيطري", "أعلاف", "نثريات"), docs):
-            _section(f"{kind} {type_name}", group, get_items, f"{total_label} {type_name}")
+        for type_name, rows in _lines_by_type(docs, get_items).items():
+            _section(f"{kind} {type_name}", rows, f"{total_label} {type_name}")
 
     # Payments table
     if payments:
@@ -601,23 +629,26 @@ def generate_low_stock_report(products: list, threshold: int = 10) -> str:
     def _rehdr(cv):
         return _draw_table_header(cv, MT - 10, HDR, CX, CW) - 2
 
-    y = _draw_table_header(c, y, HDR, CX, CW)
+    for type_name, group in _group_by_type(products):
+        y = _draw_type_title(c, y, f"{type_name}  ({len(group)} صنف)", "تقرير المخزون المنخفض")
+        y = _draw_table_header(c, y, HDR, CX, CW)
 
-    for i, p in enumerate(products):
-        is_crit = p['quantity'] <= 5
-        status  = "(!) حرج" if is_crit else "(v) منخفض"
-        row = [
-            (status,                       "c"),
-            (f"{p['selling_price']:.2f}",  "c"),
-            (f"{p['purchase_price']:.2f}", "c"),
-            (f"{p['quantity']:.2f}",       "c"),
-            (p['unit'],                    "c"),
-            (p['name'],                    "r"),
-        ]
-        bold = {0, 3, 5} if is_crit else {0}
-        _draw_row(c, y, row, CX, CW, shaded=(i % 2 == 0), bold_cols=bold)
-        y -= ROW_H
-        y = _maybe_new_page(c, y, 80, "تقرير المخزون المنخفض", _rehdr)
+        for i, p in enumerate(group):
+            is_crit = p['quantity'] <= 5
+            status  = "(!) حرج" if is_crit else "(v) منخفض"
+            row = [
+                (status,                       "c"),
+                (f"{p['selling_price']:.2f}",  "c"),
+                (f"{p['purchase_price']:.2f}", "c"),
+                (f"{p['quantity']:.2f}",       "c"),
+                (p['unit'],                    "c"),
+                (p['name'],                    "r"),
+            ]
+            bold = {0, 3, 5} if is_crit else {0}
+            _draw_row(c, y, row, CX, CW, shaded=(i % 2 == 0), bold_cols=bold)
+            y -= ROW_H
+            y = _maybe_new_page(c, y, 80, "تقرير المخزون المنخفض", _rehdr)
+        y -= 12
 
     y -= 10
     _hline(c, y, width=0.5, dashed=True);  y -= 14
@@ -676,34 +707,48 @@ def generate_inventory_report(products: list) -> str:
     def _rehdr(cv):
         return _draw_table_header(cv, MT - 10, HDR, CX, CW) - 2
 
-    y = _draw_table_header(c, y, HDR, CX, CW)
+    for type_name, group in _group_by_type(products):
+        y = _draw_type_title(c, y, f"{type_name}  ({len(group)} صنف)", "تقرير المخزون الكامل")
+        y = _draw_table_header(c, y, HDR, CX, CW)
 
-    for i, p in enumerate(products):
-        is_crit = p['quantity'] <= CRIT
-        is_low  = CRIT < p['quantity'] <= LOW
+        for i, p in enumerate(group):
+            is_crit = p['quantity'] <= CRIT
+            is_low  = CRIT < p['quantity'] <= LOW
 
-        qty_lbl = (f"(!){p['quantity']:.2f}" if is_crit
-                   else f"(v){p['quantity']:.2f}" if is_low
-                   else f"{p['quantity']:.2f}")
+            qty_lbl = (f"(!){p['quantity']:.2f}" if is_crit
+                       else f"(v){p['quantity']:.2f}" if is_low
+                       else f"{p['quantity']:.2f}")
 
-        exp = expiry_map.get(p['id'])
-        if exp:
-            exp_lbl = f"* {exp}" if exp < today_str else exp
-        else:
-            exp_lbl = "—"
+            exp = expiry_map.get(p['id'])
+            if exp:
+                exp_lbl = f"* {exp}" if exp < today_str else exp
+            else:
+                exp_lbl = "—"
 
-        row = [
-            (f"{p['selling_price']:.2f}",  "c"),
-            (f"{p['purchase_price']:.2f}", "c"),
-            (qty_lbl,                      "c"),
-            (p['unit'],                    "c"),
-            (exp_lbl,                      "c"),
-            (p['name'],                    "r"),
-        ]
-        bold = {2, 5} if is_crit else ({2} if is_low else {5})
-        _draw_row(c, y, row, CX, CW, shaded=(i % 2 == 0), bold_cols=bold)
-        y -= ROW_H
-        y = _maybe_new_page(c, y, 80, "تقرير المخزون الكامل", _rehdr)
+            row = [
+                (f"{p['selling_price']:.2f}",  "c"),
+                (f"{p['purchase_price']:.2f}", "c"),
+                (qty_lbl,                      "c"),
+                (p['unit'],                    "c"),
+                (exp_lbl,                      "c"),
+                (p['name'],                    "r"),
+            ]
+            bold = {2, 5} if is_crit else ({2} if is_low else {5})
+            _draw_row(c, y, row, CX, CW, shaded=(i % 2 == 0), bold_cols=bold)
+            y -= ROW_H
+            y = _maybe_new_page(c, y, 80, "تقرير المخزون الكامل", _rehdr)
+
+        # Per-type stock value footer
+        y = _maybe_new_page(c, y, 50, "تقرير المخزون الكامل")
+        SFTR_H = 20
+        c.setFillColor(colors.HexColor("#d5d8dc"))
+        c.setStrokeColor(DARK_GRAY);  c.setLineWidth(0.6)
+        c.rect(ML, y + 4 - SFTR_H, TW, SFTR_H, fill=1, stroke=1)
+        c.setFillColor(BLACK);  c.setFont("ArBold", 9)
+        c.drawRightString(MR - 8, y + 4 - SFTR_H + 6, _ar(
+            f"قيمة مخزون {type_name}:  شراء {sum(p['quantity'] * p['purchase_price'] for p in group):.2f} ج.م"
+            f"   |   بيع {sum(p['quantity'] * p['selling_price'] for p in group):.2f} ج.م"))
+        y -= SFTR_H + 14
 
     y -= 10
     _hline(c, y, width=0.5, dashed=True);  y -= 14

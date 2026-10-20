@@ -79,6 +79,8 @@ class NewSaleDialog(QDialog):
         self.customer_combo.setMinimumWidth(420)
         self.customer_combo.setStyleSheet(INPUT_STYLE)
         setup_searchable_combo(self.customer_combo)
+        self.customer_combo.activated.connect(self._focus_product)
+        self.customer_combo.completer().activated.connect(self._focus_product)
         self.customer_combo.lineEdit().setPlaceholderText("🔍  ابحث باسم العميل أو اتركه فارغاً للنقدي...")
 
         cust_row.addWidget(self.customer_combo)
@@ -168,6 +170,8 @@ class NewSaleDialog(QDialog):
         self.product_combo.lineEdit().setPlaceholderText("اكتب اسم الدواء...")
         self.product_combo.currentIndexChanged.connect(self._on_product_changed)
         setup_searchable_combo(self.product_combo)
+        self.product_combo.activated.connect(self._focus_qty)
+        self.product_combo.completer().activated.connect(self._focus_qty)
 
         self.unit_input = QLineEdit()
         self.unit_input.setFixedWidth(110)
@@ -191,9 +195,10 @@ class NewSaleDialog(QDialog):
         row2.setSpacing(8)
 
         self.qty_spin = QDoubleSpinBox()
-        self.qty_spin.setRange(0.01, 99999)
+        self.qty_spin.setRange(0, 99999)
+        self.qty_spin.setSpecialValueText(' ')  # 0 shows as an empty box
         self.qty_spin.setDecimals(2)
-        self.qty_spin.setValue(1)
+        self.qty_spin.setValue(0)
         self.qty_spin.setFixedWidth(100)
         self.qty_spin.setStyleSheet(INPUT_STYLE)
 
@@ -227,8 +232,8 @@ class NewSaleDialog(QDialog):
 
         # Cart table
         self.cart_table = QTableWidget()
-        self.cart_table.setColumnCount(5)
-        self.cart_table.setHorizontalHeaderLabels(["حذف","الإجمالي (ج.م)","السعر (ج.م)","الكمية","اسم الدواء"])
+        self.cart_table.setColumnCount(6)
+        self.cart_table.setHorizontalHeaderLabels(["حذف","الإجمالي (ج.م)","السعر (ج.م)","الكمية","التاريخ","اسم الدواء"])
         self.cart_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.cart_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         self.cart_table.setColumnWidth(0, 65)
@@ -367,6 +372,7 @@ class NewSaleDialog(QDialog):
                 'quantity':     si['quantity'],
                 'unit_price':   si['unit_price'],
                 'total':        si['total'],
+                'item_date':    si.get('item_date') or s.get('date'),
             })
         self._refresh_cart()
         # Set totals manually to preserve existing paid_amount
@@ -385,6 +391,24 @@ class NewSaleDialog(QDialog):
             self.stock_label.setText(f"المتاح: {p['quantity']:.2f} {p['unit']}")
             ptype = p.get('product_type') or 'بيطري'
             self.invoice_type.setCurrentText(ptype)
+
+    def _focus_product(self, *_):
+        QTimer.singleShot(0, self.product_combo.setFocus)
+
+    def _focus_qty(self, *_):
+        # Deferred so the combo finishes applying the picked item before focus moves
+        QTimer.singleShot(0, lambda: (self.qty_spin.setFocus(), self.qty_spin.selectAll()))
+
+    def _reset_product_inputs(self):
+        self.product_combo.blockSignals(True)
+        self.product_combo.setCurrentIndex(-1)
+        self.product_combo.clearEditText()
+        self.product_combo.blockSignals(False)
+        self.unit_input.clear()
+        self.qty_spin.setValue(0)
+        self.price_spin.setValue(0)
+        self.stock_label.clear()
+        self.product_combo.setFocus()
 
     def _select_pay_type(self, idx):
         self._pay_type_idx = idx
@@ -433,11 +457,16 @@ class NewSaleDialog(QDialog):
                 f"الكمية المتاحة فقط {product['quantity']:.2f} {product['unit']}")
             return
 
+        _d = self.sale_date.date()
+        item_date = f"{_d.year()}-{_d.month():02d}-{_d.day():02d}"
+
+        # Same product on the same date merges; a different date gets its own row
         for item in self.cart:
-            if item['product_id'] == product['id']:
+            if item['product_id'] == product['id'] and item.get('item_date') == item_date:
                 item['quantity'] += qty
                 item['total'] = round(item['quantity'] * item['unit_price'], 2)
-                self._refresh_cart(); self._update_total(); return
+                self._refresh_cart(); self._update_total()
+                self._reset_product_inputs(); return
 
         self.cart.append({
             'product_id':   product['id'],
@@ -446,8 +475,10 @@ class NewSaleDialog(QDialog):
             'quantity':     qty,
             'unit_price':   price,
             'total':        round(qty * price, 2),
+            'item_date':    item_date,
         })
         self._refresh_cart(); self._update_total()
+        self._reset_product_inputs()
 
     def _refresh_cart(self):
         self.cart_table.setRowCount(len(self.cart))
@@ -456,7 +487,12 @@ class NewSaleDialog(QDialog):
             name_item = QTableWidgetItem(display)
             name_item.setForeground(QColor(C_TEXT_DARK))
             name_item.setFont(QFont("Tahoma", 12, QFont.Weight.Bold))
-            self.cart_table.setItem(row, 4, name_item)
+            self.cart_table.setItem(row, 5, name_item)
+
+            date_item = QTableWidgetItem(item.get('item_date') or '—')
+            date_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            date_item.setForeground(QColor(C_TEXT_MED))
+            self.cart_table.setItem(row, 4, date_item)
 
             for col, val, clr in [
                 (3, f"{item['quantity']:.2f}",  C_TEXT_DARK),
@@ -615,8 +651,8 @@ class SaleDetailDialog(QDialog):
         layout.addWidget(info)
 
         tbl = QTableWidget()
-        tbl.setColumnCount(5)
-        tbl.setHorizontalHeaderLabels(["المنتج", "الوحدة", "الكمية", "سعر الوحدة (ج.م)", "الإجمالي (ج.م)"])
+        tbl.setColumnCount(6)
+        tbl.setHorizontalHeaderLabels(["المنتج", "التاريخ", "الوحدة", "الكمية", "سعر الوحدة (ج.م)", "الإجمالي (ج.م)"])
         tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         tbl.setAlternatingRowColors(True)
@@ -627,6 +663,7 @@ class SaleDetailDialog(QDialog):
         for r, item in enumerate(items):
             for c, (val, align) in enumerate([
                 (item['product_name'],           Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+                (item.get('item_date') or sale['date'], Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
                 (item.get('unit_name') or '—',   Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
                 (f"{item['quantity']:.2f}",       Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),
                 (f"{item['unit_price']:.2f}",     Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter),

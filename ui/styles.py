@@ -485,10 +485,30 @@ class _StyledCalendar(QCalendarWidget):
             self._nav_filter = f
 
 
+class _DateSectionSelector(QObject):
+    """Clicking on the day / month / year of a QDateEdit selects just that part,
+    so typing a number replaces it (Tab or '-' moves to the next part)."""
+
+    def __init__(self, date_edit):
+        super().__init__(date_edit)
+        self._edit = date_edit
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.MouseButtonRelease:
+            section = self._edit.currentSection()
+            self._edit.setSelectedSection(section)
+        return False
+
+
 def style_calendar(date_edit):
     """Attach a _StyledCalendar to a QDateEdit for reliable cross-theme rendering."""
-    ar_locale = QLocale(QLocale.Language.Arabic)
+    # Arabic (Libya) = Arabic month names with English digits (0-9)
+    ar_locale = QLocale(QLocale.Language.Arabic, QLocale.Country.Libya)
     date_edit.setLocale(ar_locale)
+    # yyyy-MM-dd reads left-to-right; keeps click positions matching the right part
+    date_edit.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+    line_edit = date_edit.lineEdit()
+    line_edit.installEventFilter(_DateSectionSelector(date_edit))
     cal = _StyledCalendar()
     cal.setLocale(ar_locale)
     cal.setLayoutDirection(Qt.LayoutDirection.RightToLeft)

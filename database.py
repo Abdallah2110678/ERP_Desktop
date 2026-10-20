@@ -197,6 +197,7 @@ def init_db():
         "ALTER TABLE sale_items ADD COLUMN unit_name TEXT DEFAULT ''",
         "ALTER TABLE purchase_items ADD COLUMN unit_name TEXT DEFAULT ''",
         "ALTER TABLE purchases ADD COLUMN payment_due_date TEXT",
+        "ALTER TABLE sale_items ADD COLUMN item_date TEXT",
     ]:
         try:
             conn.execute(col_sql)
@@ -544,10 +545,11 @@ def create_sale(customer_id, customer_name, items, total_amount, paid_amount, pa
 
     for item in items:
         cursor.execute(
-            """INSERT INTO sale_items (sale_id, product_id, product_name, quantity, unit_name, unit_price, total)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO sale_items (sale_id, product_id, product_name, quantity, unit_name, unit_price, total, item_date)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (sale_id, item['product_id'], item['product_name'],
-             item['quantity'], item.get('unit_name', ''), item['unit_price'], item['total'])
+             item['quantity'], item.get('unit_name', ''), item['unit_price'], item['total'],
+             item.get('item_date') or sale_date)
         )
         cursor.execute(
             "UPDATE products SET quantity = MAX(0, quantity - ?) WHERE id=?",
@@ -1059,15 +1061,17 @@ def get_supplier_balance(supplier_id, date_from, date_to):
     }
 
 
-def create_purchase(supplier_id, supplier_name, items, total_amount, paid_amount, payment_type, notes, invoice_type='بيطري', payment_due_date=None):
+def create_purchase(supplier_id, supplier_name, items, total_amount, paid_amount, payment_type, notes, invoice_type='بيطري', payment_due_date=None, date=None):
+    import datetime as _dt
+    purchase_date = date or _dt.date.today().strftime('%Y-%m-%d')
     remaining = max(0.0, total_amount - paid_amount)
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute(
-        """INSERT INTO purchases (supplier_id, supplier, total_amount, paid_amount, payment_type, invoice_type, notes, payment_due_date)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (supplier_id, supplier_name, total_amount, paid_amount, payment_type, invoice_type, notes, payment_due_date)
+        """INSERT INTO purchases (supplier_id, supplier, total_amount, paid_amount, payment_type, invoice_type, notes, payment_due_date, date)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (supplier_id, supplier_name, total_amount, paid_amount, payment_type, invoice_type, notes, payment_due_date, purchase_date)
     )
     purchase_id = cursor.lastrowid
 
@@ -1079,8 +1083,8 @@ def create_purchase(supplier_id, supplier_name, items, total_amount, paid_amount
              item['quantity'], item.get('unit_name', ''), item['unit_price'], item['total'])
         )
         cursor.execute(
-            "UPDATE products SET quantity = quantity + ?, purchase_price = ?, selling_price = ?, product_type = ? WHERE id=?",
-            (item['quantity'], item['unit_price'], item['selling_price'], invoice_type, item['product_id'])
+            "UPDATE products SET quantity = quantity + ?, purchase_price = ?, selling_price = ? WHERE id=?",
+            (item['quantity'], item['unit_price'], item['selling_price'], item['product_id'])
         )
         if item.get('product_id'):
             cursor.execute(
@@ -1238,7 +1242,7 @@ def delete_purchase(purchase_id):
 
 
 def update_purchase(purchase_id, supplier_id, supplier_name, items, total_amount,
-                    paid_amount, payment_type, notes, invoice_type, payment_due_date):
+                    paid_amount, payment_type, notes, invoice_type, payment_due_date, date=None):
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -1260,10 +1264,10 @@ def update_purchase(purchase_id, supplier_id, supplier_name, items, total_amount
 
     cursor.execute("""
         UPDATE purchases SET supplier_id=?, supplier=?, total_amount=?, paid_amount=?,
-        payment_type=?, invoice_type=?, notes=?, payment_due_date=?
+        payment_type=?, invoice_type=?, notes=?, payment_due_date=?, date=COALESCE(?, date)
         WHERE id=?
     """, (supplier_id, supplier_name, total_amount, paid_amount,
-          payment_type, invoice_type, notes, payment_due_date, purchase_id))
+          payment_type, invoice_type, notes, payment_due_date, date, purchase_id))
 
     cursor.execute("DELETE FROM purchase_items WHERE purchase_id=?", (purchase_id,))
 
@@ -1276,9 +1280,9 @@ def update_purchase(purchase_id, supplier_id, supplier_name, items, total_amount
         )
         if item.get('product_id'):
             cursor.execute(
-                "UPDATE products SET quantity = quantity + ?, purchase_price = ?, selling_price = ?, product_type = ? WHERE id=?",
+                "UPDATE products SET quantity = quantity + ?, purchase_price = ?, selling_price = ? WHERE id=?",
                 (item['quantity'], item['unit_price'],
-                 item.get('selling_price') or item['unit_price'], invoice_type, item['product_id'])
+                 item.get('selling_price') or item['unit_price'], item['product_id'])
             )
             cursor.execute(
                 """INSERT INTO product_batches (product_id, quantity, purchase_price, expiry_date)
@@ -1366,10 +1370,11 @@ def update_sale(sale_id, customer_id, customer_name, items, total_amount, paid_a
     cursor.execute("DELETE FROM sale_items WHERE sale_id=?", (sale_id,))
     for item in items:
         cursor.execute(
-            """INSERT INTO sale_items (sale_id, product_id, product_name, quantity, unit_name, unit_price, total)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO sale_items (sale_id, product_id, product_name, quantity, unit_name, unit_price, total, item_date)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (sale_id, item['product_id'], item['product_name'],
-             item['quantity'], item.get('unit_name', ''), item['unit_price'], item['total'])
+             item['quantity'], item.get('unit_name', ''), item['unit_price'], item['total'],
+             item.get('item_date') or date)
         )
         if item.get('product_id'):
             cursor.execute("UPDATE products SET quantity = MAX(0, quantity - ?) WHERE id=?",
