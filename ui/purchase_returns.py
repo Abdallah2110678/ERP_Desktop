@@ -117,8 +117,8 @@ class NewPurchaseReturnDialog(QDialog):
         self.product_combo.lineEdit().setPlaceholderText("اكتب اسم الصنف...")
         self.product_combo.currentIndexChanged.connect(self._on_product_changed)
         setup_searchable_combo(self.product_combo)
-        self.product_combo.activated.connect(self._focus_qty)
-        self.product_combo.completer().activated.connect(self._focus_qty)
+        self.product_combo.activated.connect(self._on_product_activated)
+        self.product_combo.completer().activated[str].connect(self._on_completer_product_selected)
 
         self.unit_input = QLineEdit()
         self.unit_input.setFixedWidth(110)
@@ -272,12 +272,27 @@ class NewPurchaseReturnDialog(QDialog):
         self._refresh_table()
         self._update_total()
 
+    def _apply_product(self, p):
+        self.unit_input.setText(p['unit'])
+        self.price_spin.setValue(p['purchase_price'])
+        self.inv_type_combo.setCurrentText(p.get('product_type') or 'بيطري')
+
     def _on_product_changed(self, index):
         if 0 <= index < len(self.products_data):
-            p = self.products_data[index]
-            self.unit_input.setText(p['unit'])
-            self.price_spin.setValue(p['purchase_price'])
-            self.inv_type_combo.setCurrentText(p.get('product_type') or 'بيطري')
+            self._apply_product(self.products_data[index])
+
+    def _on_product_activated(self, index):
+        text = self.product_combo.currentText().strip()
+        p = next((x for x in self.products_data if x['name'] == text), None)
+        if p:
+            self._apply_product(p)
+        QTimer.singleShot(0, lambda: (self.qty_spin.setFocus(), self.qty_spin.selectAll()))
+
+    def _on_completer_product_selected(self, text):
+        p = next((x for x in self.products_data if x['name'] == text), None)
+        if p:
+            self._apply_product(p)
+        QTimer.singleShot(0, lambda: (self.qty_spin.setFocus(), self.qty_spin.selectAll()))
 
     def _focus_product(self, *_):
         QTimer.singleShot(0, self.product_combo.setFocus)
@@ -319,15 +334,22 @@ class NewPurchaseReturnDialog(QDialog):
             product_id = None
             name = typed_name
 
-        for item in self.cart:
-            if item['product_id'] is not None and item['product_id'] == product_id:
-                item['quantity'] += qty
-                item['unit_price'] = price
-                item['total'] = round(item['quantity'] * price, 2)
-                self._refresh_table()
-                self._update_total()
-                self._reset_product_inputs()
-                return
+        # نثريات items never merge — each add is always its own row.
+        product_obj = self.products_data[idx] if 0 <= idx < len(self.products_data) else None
+        is_nathariat = (
+            self.inv_type_combo.currentText() == 'نثريات'
+            or bool(product_obj and (product_obj.get('product_type') or '') == 'نثريات')
+        )
+        if not is_nathariat:
+            for item in self.cart:
+                if item['product_id'] is not None and item['product_id'] == product_id:
+                    item['quantity'] += qty
+                    item['unit_price'] = price
+                    item['total'] = round(item['quantity'] * price, 2)
+                    self._refresh_table()
+                    self._update_total()
+                    self._reset_product_inputs()
+                    return
 
         self.cart.append({
             'product_id': product_id,

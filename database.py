@@ -8,7 +8,9 @@ from pathlib import Path
 
 def _app_dir() -> Path:
     if getattr(sys, 'frozen', False):
-        return Path(sys.executable).parent
+        app_data = Path(os.environ.get('APPDATA', Path.home())) / 'ErpPharmacy'
+        app_data.mkdir(parents=True, exist_ok=True)
+        return app_data
     return Path(__file__).parent
 
 

@@ -19,8 +19,9 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.datas,
     [],
-    exclude_binaries=True,
     name='ErpPharmacy',
     debug=False,
     bootloader_ignore_signals=False,
@@ -34,13 +35,4 @@ exe = EXE(
     entitlements_file=None,
     icon=['icon.ico'],
     # version='version_info.txt',   # Arabic file properties; the build with this was flagged by Defender (Bearfoos.A!ml)
-)
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='ErpPharmacy',
 )

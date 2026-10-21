@@ -183,8 +183,8 @@ class NewPurchaseDialog(QDialog):
         self.product_combo.lineEdit().setPlaceholderText("اكتب اسم الدواء أو اختره من القائمة...")
         self.product_combo.currentIndexChanged.connect(self._on_product_changed)
         setup_searchable_combo(self.product_combo)
-        self.product_combo.activated.connect(self._focus_qty)
-        self.product_combo.completer().activated.connect(self._focus_qty)
+        self.product_combo.activated.connect(self._on_product_activated)
+        self.product_combo.completer().activated[str].connect(self._on_completer_product_selected)
 
         self.unit_input = QLineEdit()
         self.unit_input.setFixedWidth(110)
@@ -430,15 +430,36 @@ class NewPurchaseDialog(QDialog):
         self.due_date_lbl.setVisible(is_deferred)
         self.due_date_edit.setVisible(is_deferred)
 
+    def _apply_product(self, p):
+        """Fill in unit, prices, and invoice type from a product dict."""
+        self.unit_input.setText(p['unit'])
+        self.price_spin.setValue(p['purchase_price'])
+        self.selling_price_spin.setValue(p['selling_price'])
+        self.inv_type_combo.setCurrentText(p.get('product_type') or 'بيطري')
+
     def _on_product_changed(self, index):
-        if 0 <= index < len(self.products_data):
-            typed = self.product_combo.currentText().strip()
-            p = self.products_data[index]
-            if typed == p['name']:
-                self.unit_input.setText(p['unit'])
-                self.price_spin.setValue(p['purchase_price'])
-                self.selling_price_spin.setValue(p['selling_price'])
-                self.inv_type_combo.setCurrentText(p.get('product_type') or 'بيطري')
+        if index < 0:
+            return
+        pid = self.product_combo.itemData(index)
+        if pid is None:
+            return
+        p = next((x for x in self.products_data if x['id'] == pid), None)
+        if p:
+            self._apply_product(p)
+
+    def _on_product_activated(self, index):
+        """Fires on Enter or direct dropdown click — ensure invoice type is set."""
+        text = self.product_combo.currentText().strip()
+        p = next((x for x in self.products_data if x['name'] == text), None)
+        if p:
+            self._apply_product(p)
+        QTimer.singleShot(0, lambda: (self.qty_spin.setFocus(), self.qty_spin.selectAll()))
+
+    def _on_completer_product_selected(self, text):
+        p = next((x for x in self.products_data if x['name'] == text), None)
+        if p:
+            self._apply_product(p)
+        QTimer.singleShot(0, lambda: (self.qty_spin.setFocus(), self.qty_spin.selectAll()))
 
     def _focus_product(self, *_):
         QTimer.singleShot(0, self.product_combo.setFocus)

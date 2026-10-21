@@ -170,8 +170,8 @@ class NewSaleDialog(QDialog):
         self.product_combo.lineEdit().setPlaceholderText("اكتب اسم الدواء...")
         self.product_combo.currentIndexChanged.connect(self._on_product_changed)
         setup_searchable_combo(self.product_combo)
-        self.product_combo.activated.connect(self._focus_qty)
-        self.product_combo.completer().activated.connect(self._focus_qty)
+        self.product_combo.activated.connect(self._on_product_activated)
+        self.product_combo.completer().activated[str].connect(self._on_completer_product_selected)
 
         self.unit_input = QLineEdit()
         self.unit_input.setFixedWidth(110)
@@ -383,14 +383,28 @@ class NewSaleDialog(QDialog):
         self.paid_spin.blockSignals(False)
         self._update_remaining()
 
+    def _apply_product(self, p):
+        self.unit_input.setText(p['unit'])
+        self.price_spin.setValue(p['selling_price'])
+        self.stock_label.setText(f"المتاح: {p['quantity']:.2f} {p['unit']}")
+        self.invoice_type.setCurrentText(p.get('product_type') or 'بيطري')
+
     def _on_product_changed(self, index):
         if 0 <= index < len(self.products_data):
-            p = self.products_data[index]
-            self.unit_input.setText(p['unit'])
-            self.price_spin.setValue(p['selling_price'])
-            self.stock_label.setText(f"المتاح: {p['quantity']:.2f} {p['unit']}")
-            ptype = p.get('product_type') or 'بيطري'
-            self.invoice_type.setCurrentText(ptype)
+            self._apply_product(self.products_data[index])
+
+    def _on_product_activated(self, index):
+        text = self.product_combo.currentText().strip()
+        p = next((x for x in self.products_data if x['name'] == text), None)
+        if p:
+            self._apply_product(p)
+        QTimer.singleShot(0, lambda: (self.qty_spin.setFocus(), self.qty_spin.selectAll()))
+
+    def _on_completer_product_selected(self, text):
+        p = next((x for x in self.products_data if x['name'] == text), None)
+        if p:
+            self._apply_product(p)
+        QTimer.singleShot(0, lambda: (self.qty_spin.setFocus(), self.qty_spin.selectAll()))
 
     def _focus_product(self, *_):
         QTimer.singleShot(0, self.product_combo.setFocus)
@@ -460,13 +474,19 @@ class NewSaleDialog(QDialog):
         _d = self.sale_date.date()
         item_date = f"{_d.year()}-{_d.month():02d}-{_d.day():02d}"
 
-        # Same product on the same date merges; a different date gets its own row
-        for item in self.cart:
-            if item['product_id'] == product['id'] and item.get('item_date') == item_date:
-                item['quantity'] += qty
-                item['total'] = round(item['quantity'] * item['unit_price'], 2)
-                self._refresh_cart(); self._update_total()
-                self._reset_product_inputs(); return
+        # Same product on the same date merges; a different date gets its own row.
+        # نثريات items never merge — each add is always its own row.
+        is_nathariat = (
+            self.invoice_type.currentText() == 'نثريات'
+            or (product.get('product_type') or '') == 'نثريات'
+        )
+        if not is_nathariat:
+            for item in self.cart:
+                if item['product_id'] == product['id'] and item.get('item_date') == item_date:
+                    item['quantity'] += qty
+                    item['total'] = round(item['quantity'] * item['unit_price'], 2)
+                    self._refresh_cart(); self._update_total()
+                    self._reset_product_inputs(); return
 
         self.cart.append({
             'product_id':   product['id'],
