@@ -486,9 +486,10 @@ def generate_customer_account(customer_id: int, date_from: str, date_to: str) ->
         return None
 
     data     = db.get_customer_account(customer_id, date_from, date_to)
-    sales    = data['sales']
-    returns  = data['returns']
-    payments = data['payments']
+    # The query returns newest first (for the on-screen page); the PDF lists oldest first.
+    sales    = data['sales'][::-1]
+    returns  = data['returns'][::-1]
+    payments = data['payments'][::-1]
 
     # Lines are grouped by each product's own type (one bill can mix بيطري and أعلاف items);
     # the bill's invoice_type is only a fallback for products that no longer exist.
@@ -501,10 +502,10 @@ def generate_customer_account(customer_id: int, date_from: str, date_to: str) ->
                 t = product_types.get(it.get('product_id')) or d.get('invoice_type') or 'بيطري'
                 t = 'نثريات' if t == 'أخرى' else t
                 groups.setdefault(t, []).append((it.get('item_date') or d['date'], it))
-        # Newest first by each line's own date (a bill can hold lines from several days);
+        # Oldest first by each line's own date (a bill can hold lines from several days);
         # the sort is stable, so same-day lines keep their bill order.
         for rows in groups.values():
-            rows.sort(key=lambda r: r[0], reverse=True)
+            rows.sort(key=lambda r: r[0])
         return groups
 
     total_sales    = sum(s['total_amount'] for s in sales)
