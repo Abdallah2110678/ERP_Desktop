@@ -466,7 +466,7 @@ class NewSaleDialog(QDialog):
         if qty <= 0:
             show_warning(self, "خطأ", "الكمية يجب أن تكون أكبر من صفر")
             return
-        if qty > product['quantity']:
+        if round(qty, 2) > round(product['quantity'], 2):
             show_warning(self, "تحذير",
                 f"الكمية المتاحة فقط {product['quantity']:.2f} {product['unit']}")
             return
