@@ -16,11 +16,11 @@ VSVersionInfo(
       StringTable(
         '040104b0',
         [StringStruct('CompanyName', 'CompuMarts'),
-         StringStruct('FileDescription', 'مكتب عباد الرحمان'),
+         StringStruct('FileDescription', 'مكتب عباد الرحمن'),
          StringStruct('FileVersion', '1.0.0.0'),
          StringStruct('InternalName', 'ErpPharmacy'),
          StringStruct('OriginalFilename', 'ErpPharmacy.exe'),
-         StringStruct('ProductName', 'مكتب عباد الرحمان'),
+         StringStruct('ProductName', 'مكتب عباد الرحمن'),
          StringStruct('ProductVersion', '1.0.0.0')])
     ]),
     VarFileInfo([VarStruct('Translation', [1025, 1200])])

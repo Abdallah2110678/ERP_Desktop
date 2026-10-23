@@ -9,7 +9,7 @@ def _app_dir() -> Path:
     return Path(__file__).parent
 
 
-PHARMACY_NAME    = "مكتب عباد الرحمان"
+PHARMACY_NAME    = "مكتب عباد الرحمن"
 PHARMACY_SUBTITLE = "صيدلية بيطرية متخصصة"
 APP_VERSION      = "1.0"
 APP_YEAR         = datetime.date.today().year

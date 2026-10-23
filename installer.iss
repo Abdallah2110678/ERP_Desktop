@@ -1,9 +1,9 @@
 #define AppName      "ErpPharmacy"
-#define AppNameAr    "مكتب عباد الرحمان"
+#define AppNameAr    "مكتب عباد الرحمن"
 #define AppVersion   "1.0.0"
 #define AppPublisher "CompuMarts"
 #define AppExeName   "ErpPharmacy.exe"
-#define SourceDir    "dist\ErpPharmacy"
+#define SourceDir    "dist"
 
 [Setup]
 AppId={{A3F2C1B4-7D8E-4F9A-B2C6-1E3D5F7A9B0C}
@@ -23,8 +23,7 @@ SetupIconFile=icon.ico
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
-; RTL Arabic UI
-RightToLeft=yes
+; RTL comes from Arabic.isl ([LangOptions] RightToLeft=yes)
 ; Minimum Windows 10
 MinVersion=10.0
 PrivilegesRequired=admin
@@ -38,8 +37,8 @@ Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-; All built app files from PyInstaller dist folder
-Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Single-file PyInstaller build (the database lives in %APPDATA%\ErpPharmacy, not here)
+Source: "{#SourceDir}\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#AppNameAr}";  Filename: "{app}\{#AppExeName}"
